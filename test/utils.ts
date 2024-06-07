@@ -37,6 +37,9 @@ export async function deployContracts(
     'ProtocolTimeManager',
   );
   const registriesFactory = await ethers.getContractFactory('Registries');
+  const authorizedAccountsFactory = await ethers.getContractFactory(
+    'AuthorizedAccounts',
+  );
 
   // Deploy
   const syloToken = await syloTokenFactory.deploy();
@@ -46,6 +49,7 @@ export async function deployContracts(
   const seekerStakingManager = await seekerStakingManagerFactor.deploy();
   const protocolTimeManager = await protocolTimeManagerFactory.deploy();
   const registries = await registriesFactory.deploy();
+  const authorizedAccounts = await authorizedAccountsFactory.deploy();
 
   // Options
   const syloStakingManagerOpts = {
@@ -75,6 +79,7 @@ export async function deployContracts(
     await seekerStatsOracle.getAddress(),
   );
   await registries.initialize(registriesOpts.defaultPayoutPercentage);
+  await authorizedAccounts.initialize();
   await protocolTimeManager.initialize(
     protocolTimeManagerOpts.cycleDuration,
     protocolTimeManagerOpts.periodDuration,
@@ -88,6 +93,7 @@ export async function deployContracts(
     seekers,
     protocolTimeManager,
     registries,
+    authorizedAccounts,
   };
 }
 
