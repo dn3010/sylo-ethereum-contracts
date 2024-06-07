@@ -40,6 +40,10 @@ export async function deployContracts(
   const authorizedAccountsFactory = await ethers.getContractFactory(
     'AuthorizedAccounts',
   );
+  const rewardsManagerFactory = await ethers.getContractFactory(
+    'RewardsManager',
+  );
+  const ticketingFactory = await ethers.getContractFactory('Ticketing');
 
   // Deploy
   const syloToken = await syloTokenFactory.deploy();
@@ -50,6 +54,8 @@ export async function deployContracts(
   const protocolTimeManager = await protocolTimeManagerFactory.deploy();
   const registries = await registriesFactory.deploy();
   const authorizedAccounts = await authorizedAccountsFactory.deploy();
+  const rewardsManager = await rewardsManagerFactory.deploy();
+  const ticketing = await ticketingFactory.deploy();
 
   // Options
   const syloStakingManagerOpts = {
@@ -80,6 +86,8 @@ export async function deployContracts(
   );
   await registries.initialize(registriesOpts.defaultPayoutPercentage);
   await authorizedAccounts.initialize();
+  await ticketing.initialize(await rewardsManager.getAddress());
+  await rewardsManager.initialize(await registries.getAddress(), ticketing);
   await protocolTimeManager.initialize(
     protocolTimeManagerOpts.cycleDuration,
     protocolTimeManagerOpts.periodDuration,
@@ -94,6 +102,8 @@ export async function deployContracts(
     protocolTimeManager,
     registries,
     authorizedAccounts,
+    rewardsManager,
+    ticketing,
   };
 }
 
