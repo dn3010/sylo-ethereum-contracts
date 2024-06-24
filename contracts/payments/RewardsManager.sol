@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./libraries/SyloUtils.sol";
 
 import "./IRewardsManager.sol";
-import "./Registries.sol";
+import "../Registries.sol";
 import "./Ticketing.sol";
 import "./ITicketing.sol";
 
