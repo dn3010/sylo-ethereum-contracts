@@ -115,22 +115,6 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
      * @notice Creates a unique proofing message for the provided seeker.
      * @param seeker The object containing the seekers statistics.
      */
-    function createProofMessage(Seeker calldata seeker) external pure returns (bytes memory) {
-        return _createProofMessage(seeker);
-    }
-
-    /**
-     * @notice Creates a unique proofing message for the provided seeker.
-     * @param seeker The object containing the seeker's statistics.
-     */
-    function createProofMessage(Seeker calldata seeker) external pure returns (bytes memory) {
-        return _createProofMessage(seeker);
-    }
-
-    /**
-     * @notice Creates a unique proofing message for the provided seeker.
-     * @param seeker The object containing the seekers statistics.
-     */
     function _createProofMessage(Seeker calldata seeker) internal pure returns (bytes memory) {
         return
             abi.encodePacked(

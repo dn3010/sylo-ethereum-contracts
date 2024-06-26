@@ -14,8 +14,10 @@ contract StakingOrchestrator is
     Ownable2StepUpgradeable,
     ERC165
 {
-    function getNodeCurrentStake(address node) external returns (uint256) {
-        return 0;
+    mapping(address => uint256) nodeStake;
+
+    function getNodeCurrentStake(address node) external view returns (uint256) {
+        return nodeStake[node];
     }
 
     function getUserCurrentStake(address node, address user) external returns (uint256) {
@@ -30,7 +32,9 @@ contract StakingOrchestrator is
         return 0;
     }
 
-    function syloStakeAdded(address node, address user, uint256 newAmount) external {}
+    function syloStakeAdded(address node, address user, uint256 newAmount) external {
+        nodeStake[node] += newAmount;
+    }
 
     function syloStakeRemoved(address node, address user, uint256 newAmount) external {}
 

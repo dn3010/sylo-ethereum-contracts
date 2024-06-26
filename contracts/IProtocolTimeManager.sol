@@ -25,4 +25,6 @@ interface IProtocolTimeManager {
     function getCurrentPeriod() external returns (uint256);
 
     function getStart() external view returns (uint256);
+
+    function isFinalStakingPeriod() external view returns (bool);
 }

@@ -417,4 +417,14 @@ contract ProtocolTimeManager is
         uint256 period = _getCurrentPeriod();
         return (cycle.iteration, period, cycle);
     }
+
+    function isFinalStakingPeriod() external view returns (bool) {
+        Cycle memory cycle = _getCurrentCycle();
+        uint256 periodDuration = _getPeriodDuration();
+        uint256 cycleFinish = cycle.start + cycle.duration;
+        if ((block.timestamp + periodDuration) >= cycleFinish) {
+            return true;
+        }
+        return false;
+    }
 }

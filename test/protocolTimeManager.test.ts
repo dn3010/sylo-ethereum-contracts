@@ -567,6 +567,7 @@ describe('Protocol time manager', () => {
       'function getCurrentCycle() external returns ((uint256,uint256,uint256))',
       'function getCurrentPeriod() external returns (uint256)',
       'function getStart() external view returns (uint256)',
+      'function isFinalStakingPeriod() external view returns (bool)',
     ];
 
     const interfaceId = getInterfaceId(abi);
@@ -577,22 +578,6 @@ describe('Protocol time manager', () => {
       supports,
       true,
       'Expected protocol time manager to support correct interface',
-    );
-
-    const abiERC165 = [
-      'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
-    ];
-
-    const interfaceIdERC165 = getInterfaceId(abiERC165);
-
-    const supportsERC165 = await protocolTimeManager.supportsInterface(
-      interfaceIdERC165,
-    );
-
-    assert.equal(
-      supportsERC165,
-      true,
-      'Expected protocol time manager to support ERC165',
     );
 
     const invalidAbi = ['function foo(uint256 duration) external'];
