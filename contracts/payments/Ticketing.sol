@@ -141,11 +141,11 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         IERC20 token,
         IDeposits deposits,
         IRegistries registries,
-        ISyloStakingManager stakingManager,
         IRewardsManager rewardsManager,
         IAuthorizedAccounts authorizedAccounts,
         IFuturepassRegistrar futurepassRegistrar,
         uint256 _faceValue,
+        uint256 _multiReceiverFaceValue,
         uint128 _baseLiveWinProb,
         uint128 _expiredWinProb,
         uint32 _decayRate,
@@ -160,12 +160,12 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         _token = token;
         _deposits = deposits;
         _registries = registries;
-        _stakingManager = stakingManager;
         _rewardsManager = rewardsManager;
         _authorizedAccounts = authorizedAccounts;
         _futurepassRegistrar = futurepassRegistrar;
 
         faceValue = _faceValue;
+        multiReceiverFaceValue = _multiReceiverFaceValue;
         baseLiveWinProb = _baseLiveWinProb;
         expiredWinProb = _expiredWinProb;
         decayRate = _decayRate;

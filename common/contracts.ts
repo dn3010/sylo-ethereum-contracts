@@ -47,6 +47,8 @@ export type ContractAddresses = {
   protocolTimeManager: string;
   registries: string;
   authorizedAccounts: string;
+  deposits: string;
+  ticketing: string;
   rewardsManager: string;
   ticketing: string;
   stakingOrchestator: string;
@@ -97,8 +99,8 @@ export function connectContracts(
     provider,
   );
 
-  const rewardsManager = factories.RewardsManager__factory.connect(
-    contracts.rewardsManager,
+  const deposits = factories.Deposits__factory.connect(
+    contracts.ticketing,
     provider,
   );
 
@@ -126,6 +128,8 @@ export function connectContracts(
     protocolTimeManager,
     registries,
     authorizedAccounts,
+    deposits,
+    ticketing,
     rewardsManager,
     ticketing,
     stakingOrchestrator,
