@@ -12,6 +12,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../libraries/SyloUtils.sol";
 
 import "./ITicketing.sol";
+import "./IDeposits.sol";
 import "./IRewardsManager.sol";
 import "../IRegistries.sol";
 import "../IAuthorizedAccounts.sol";
@@ -26,6 +27,9 @@ import "../staking/sylo/ISyloStakingManager.sol";
 contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165 {
     /** ERC20 Sylo token contract.*/
     IERC20 public _token;
+
+    /** Sylo Depoists contract */
+    IDeposits public _deposits;
 
     /** Sylo Registries contract */
     IRegistries public _registries;
@@ -46,19 +50,9 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
      */
     IFuturepassRegistrar public _futurepassRegistrar;
 
-    /**
-     * @notice The number of blocks a user must wait after calling "unlock"
-     * before they can withdraw their funds.
-     */
-    uint256 public unlockDuration;
-
-    /** @notice Mapping of user deposits */
-    mapping(address => Deposit) public deposits;
-
     /** @notice Mapping of ticket hashes, used to check if a ticket has been redeemed */
     mapping(bytes32 => bool) public usedTickets;
 
-    event UnlockDurationUpdated(uint256 unlockDuration);
     event SenderPenaltyBurnt(address sender);
     event Redemption(
         uint256 indexed epochId,
@@ -77,17 +71,8 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         uint256 amount
     );
 
-    error NoEsrowAndPenalty();
-    error UnlockingInProcess();
-    error UnlockingNotInProcess();
-    error UnlockingNotCompleted();
-    error EscrowAmountCannotBeZero();
-    error PenaltyAmountCannotBeZero();
-    error UnlockDurationCannotBeZero();
-    error AccountCannotBeZeroAddress();
     error InvalidSigningPermission();
     error SenderCannotUseAttachedAuthorizedAccount();
-
     error TicketNotWinning();
     error MissingFuturepassAccount(address receiver);
     error TicketAlreadyUsed();
@@ -105,6 +90,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
 
     function initialize(
         IERC20 token,
+        IDeposits deposits,
         IRegistries registries,
         ISyloStakingManager stakingManager,
         IRewardsManager rewardsManager,
@@ -116,44 +102,15 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
             revert TokenCannotBeZeroAddress();
         }
 
-        SyloUtils.validateContractInterface(
-            "Registries",
-            address(registries),
-            type(IRegistries).interfaceId
-        );
-
-        SyloUtils.validateContractInterface(
-            "SyloStakingManager",
-            address(stakingManager),
-            type(ISyloStakingManager).interfaceId
-        );
-
-        SyloUtils.validateContractInterface(
-            "RewardsManager",
-            address(rewardsManager),
-            type(IRewardsManager).interfaceId
-        );
-
-        SyloUtils.validateContractInterface(
-            "AuthorizedAccounts",
-            address(authorizedAccounts),
-            type(IAuthorizedAccounts).interfaceId
-        );
-
-        if (_unlockDuration == 0) {
-            revert UnlockDurationCannotBeZero();
-        }
-
         Ownable2StepUpgradeable.__Ownable2Step_init();
 
         _token = token;
+        _deposits = deposits;
         _registries = registries;
         _stakingManager = stakingManager;
         _rewardsManager = rewardsManager;
         _authorizedAccounts = authorizedAccounts;
         _futurepassRegistrar = futurepassRegistrar;
-
-        unlockDuration = _unlockDuration;
     }
 
     /**
@@ -162,135 +119,6 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
      */
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
         return interfaceId == type(ITicketing).interfaceId;
-    }
-
-    /**
-     * @notice Set the unlock duration for deposits. Only callable
-     * by the owner.
-     * @param _unlockDuration The unlock duration in blocks.
-     */
-    function setUnlockDuration(uint256 _unlockDuration) external onlyOwner {
-        if (_unlockDuration == 0) {
-            revert UnlockDurationCannotBeZero();
-        }
-
-        unlockDuration = _unlockDuration;
-        emit UnlockDurationUpdated(_unlockDuration);
-    }
-
-    /**
-     * @notice Use this function to deposit funds into the
-     * escrow. This will fail if the deposit is currently being
-     * unlocked.
-     * @param amount The amount in SOLO to add to the escrow.
-     * @param account The address of the account holding the escrow.
-     */
-    function depositEscrow(uint256 amount, address account) external {
-        if (amount == 0) {
-            revert EscrowAmountCannotBeZero();
-        }
-        if (account == address(0)) {
-            revert AccountCannotBeZeroAddress();
-        }
-
-        Deposit storage deposit = getDeposit(account);
-        if (deposit.unlockAt != 0) {
-            revert UnlockingInProcess();
-        }
-
-        deposit.escrow = deposit.escrow + amount;
-
-        SafeERC20.safeTransferFrom(_token, msg.sender, address(this), amount);
-    }
-
-    /**
-     * @notice Use this function to deposit funds into the
-     * penalty. This will fail if the deposit is currently being
-     * unlocked.
-     * @param amount The amount in SOLO to add to the escrow.
-     * @param account The address of the account holding the penalty.
-     */
-    function depositPenalty(uint256 amount, address account) external {
-        if (amount == 0) {
-            revert PenaltyAmountCannotBeZero();
-        }
-        if (account == address(0)) {
-            revert AccountCannotBeZeroAddress();
-        }
-
-        Deposit storage deposit = getDeposit(account);
-        if (deposit.unlockAt != 0) {
-            revert UnlockingInProcess();
-        }
-
-        deposit.penalty = deposit.penalty + amount;
-
-        SafeERC20.safeTransferFrom(_token, msg.sender, address(this), amount);
-    }
-
-    /**
-     * @notice Call this function to begin unlocking deposits. This function
-     * will fail if no deposit exists, or if the unlock process has
-     * already begun.
-     */
-    function unlockDeposits() external returns (uint256) {
-        Deposit storage deposit = getDeposit(msg.sender);
-
-        if (deposit.escrow == 0 && deposit.penalty == 0) {
-            revert NoEsrowAndPenalty();
-        }
-        if (deposit.unlockAt != 0) {
-            revert UnlockingInProcess();
-        }
-
-        deposit.unlockAt = block.number + unlockDuration;
-
-        return deposit.unlockAt;
-    }
-
-    /**
-     * @notice Call this function to cancel any deposit that is in the
-     * unlocking process.
-     */
-    function lockDeposits() external {
-        Deposit storage deposit = getDeposit(msg.sender);
-        if (deposit.unlockAt == 0) {
-            revert UnlockingNotInProcess();
-        }
-
-        delete deposit.unlockAt;
-    }
-
-    /**
-     * @notice Call this function once the unlock duration has
-     * elapsed in order to transfer the unlocked tokens to the caller's account.
-     */
-    function withdraw() external {
-        return withdrawTo(msg.sender);
-    }
-
-    /**
-     * @notice Call this function once the unlock duration has
-     * elapsed in order to transfer the unlocked tokens to the specified
-     * account.
-     * @param account The address of the account the tokens should be
-     * transferred to.
-     */
-    function withdrawTo(address account) public {
-        Deposit memory deposit = getDeposit(msg.sender);
-        if (deposit.unlockAt == 0) {
-            revert UnlockingNotInProcess();
-        }
-        if (deposit.unlockAt >= block.number) {
-            revert UnlockingNotCompleted();
-        }
-
-        uint256 amount = deposit.escrow + deposit.penalty;
-
-        // Reset deposit values to 0
-        delete deposits[msg.sender];
-
-        SafeERC20.safeTransfer(_token, account, amount);
     }
 
     /**
@@ -407,15 +235,16 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         address sender,
         address redeemer
     ) internal returns (uint256) {
-        Deposit storage deposit = getDeposit(sender);
+        IDeposits.Deposit memory deposit = _deposits.getDeposit(sender);
 
         uint256 amount;
 
         if (faceValue > deposit.escrow) {
             amount = deposit.escrow;
             incrementRewardPool(redeemer, deposit, amount);
-            SafeERC20.safeTransfer(
+            SafeERC20.safeTransferFrom(
                 _token,
+                address(_deposits),
                 address(0x000000000000000000000000000000000000dEaD),
                 deposit.penalty
             );
@@ -586,10 +415,6 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         return keccak256(abi.encodePacked(keccak256(abi.encodePacked(generationBlock, rand))));
     }
 
-    function getDeposit(address account) private view returns (Deposit storage) {
-        return deposits[account];
-    }
-
     function validateTicketSig(
         address main,
         UserSignature memory sig,
@@ -743,12 +568,12 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
 
     function incrementRewardPool(
         address stakee,
-        Deposit storage deposit,
+        IDeposits.Deposit memory deposit,
         uint256 amount
     ) internal {
         deposit.escrow = deposit.escrow - amount;
 
-        SafeERC20.safeTransfer(_token, address(_rewardsManager), amount);
+        SafeERC20.safeTransferFrom(_token, address(_deposits), address(_rewardsManager), amount);
         _rewardsManager.incrementRewardPool(stakee, 0 /* TODO */, amount);
     }
 

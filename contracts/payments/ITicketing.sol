@@ -43,18 +43,6 @@ interface ITicketing {
         bytes32 redeemerCommit; // Hash of the secret random number of the redeemer
     }
 
-    function setUnlockDuration(uint256 _unlockDuration) external;
-
-    function depositEscrow(uint256 amount, address account) external;
-
-    function depositPenalty(uint256 amount, address account) external;
-
-    function unlockDeposits() external returns (uint256);
-
-    function lockDeposits() external;
-
-    function withdraw() external;
-
     function redeem(
         Ticket calldata ticket,
         uint256 redeemerRand,
