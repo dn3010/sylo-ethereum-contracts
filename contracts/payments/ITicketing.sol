@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import "../IAuthorizedAccounts.sol";
 
-interface ISyloTicketing {
+interface ITicketing {
     struct Deposit {
         uint256 escrow; // Balance of users escrow
         uint256 penalty; // Balance of users penalty
