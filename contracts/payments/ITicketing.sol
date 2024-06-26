@@ -26,7 +26,7 @@ interface ITicketing {
     }
 
     struct Ticket {
-        uint256 epochId; // The epoch this ticket is associated with
+        uint256 cycle; // The cycle this ticket is associated with
         address sender; // Ticket sender's address
         address receiver; // Ticket receiver's address
         address redeemer; // Address of the intended recipient
@@ -36,7 +36,7 @@ interface ITicketing {
 
     // A type of ticket that does not explicit state the receiver address.
     struct MultiReceiverTicket {
-        uint256 epochId; // The epoch this ticket is associated with
+        uint256 cycle; // The cycle this ticket is associated with
         address sender; // Ticket sender's address
         address redeemer; // Ticket redeemer's address
         uint256 generationBlock; // Block number the ticket was generated
