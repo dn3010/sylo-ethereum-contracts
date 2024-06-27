@@ -26,8 +26,8 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
 
     event UnlockDurationUpdated(uint256 unlockDuration);
 
-    error TokenCannotBeZeroAddress();
-    error NoEsrowAndPenalty();
+    error TokenAddressCannotBeNil();
+    error NoEscrowAndPenalty();
     error UnlockingInProcess();
     error UnlockingNotInProcess();
     error UnlockingNotCompleted();
@@ -38,12 +38,16 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
 
     function initialize(IERC20 token, uint256 _unlockDuration) external initializer {
         if (address(token) == address(0)) {
-            revert TokenCannotBeZeroAddress();
+            revert TokenAddressCannotBeNil();
         }
 
         if (_unlockDuration == 0) {
             revert UnlockDurationCannotBeZero();
         }
+
+        Ownable2StepUpgradeable.__Ownable2Step_init();
+
+        _token = token;
 
         unlockDuration = _unlockDuration;
     }
@@ -138,7 +142,7 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
         Deposit storage deposit = deposits[msg.sender];
 
         if (deposit.escrow == 0 && deposit.penalty == 0) {
-            revert NoEsrowAndPenalty();
+            revert NoEscrowAndPenalty();
         }
         if (deposit.unlockAt != 0) {
             revert UnlockingInProcess();

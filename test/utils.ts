@@ -171,6 +171,7 @@ export async function deployContracts(
     protocolTimeManager,
     registries,
     authorizedAccounts,
+    deposits,
     rewardsManager,
     ticketing,
     stakingOrchestrator,
