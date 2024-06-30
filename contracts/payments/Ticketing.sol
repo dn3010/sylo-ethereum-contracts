@@ -129,13 +129,11 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     error TicketAlreadyRedeemed();
     error RedeemerCommitMismatch();
     error InvalidSignature();
-    error TokenCannotBeZeroAddress();
-    error TicketNotCreatedInTheEpoch();
+    error TokenAddressCannotBeNil();
     error TicketCannotBeFromFutureBlock();
     error TicketSenderCannotBeZeroAddress();
     error TicketReceiverCannotBeZeroAddress();
     error TicketRedeemerCannotBeZeroAddress();
-    error RedeemerMustHaveJoinedEpoch(uint256 cycle);
 
     function initialize(
         IERC20 token,
@@ -152,7 +150,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         uint256 _ticketDuration
     ) external initializer {
         if (address(token) == address(0)) {
-            revert TokenCannotBeZeroAddress();
+            revert TokenAddressCannotBeNil();
         }
 
         Ownable2StepUpgradeable.__Ownable2Step_init();

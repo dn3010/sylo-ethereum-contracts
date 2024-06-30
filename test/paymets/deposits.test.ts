@@ -4,9 +4,8 @@ import { deployContracts, getBlockNumber, MAX, MAX_SYLO } from '../utils';
 import { Signer } from 'ethers';
 import { expect, assert } from 'chai';
 import { Deposits } from '../../typechain-types';
-import { increase } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
-describe.only('Deposits', () => {
+describe('Deposits', () => {
   let accounts: Signer[];
   let contracts: SyloContracts;
   let deposits: Deposits;
