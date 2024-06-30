@@ -16,10 +16,6 @@ contract Ticketing is ITicketing, Ownable2StepUpgradeable, ERC165 {
     function initialize(RewardsManager _rewardsManager) external initializer {
         Ownable2StepUpgradeable.__Ownable2Step_init();
 
-        if (address(_rewardsManager) == address(0)) {
-            revert CannotInitializeWithZeroRewardsManager();
-        }
-
         rewardsManager = _rewardsManager;
     }
 
