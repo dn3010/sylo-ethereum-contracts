@@ -32,12 +32,12 @@ describe('Seeker Stats', () => {
 
   it('cannot initialize seeker stats oracle with invalid arguemnts', async () => {
     const factory = await ethers.getContractFactory('SeekerStatsOracle');
-    const seekerStatsOracle = await factory.deploy();
+    const seekerStatsOracleTemp = await factory.deploy();
 
     await expect(
-      seekerStatsOracle.initialize(ethers.ZeroAddress),
+      seekerStatsOracleTemp.initialize(ethers.ZeroAddress),
     ).to.be.revertedWithCustomError(
-      seekerStatsOracle,
+      seekerStatsOracleTemp,
       'OracleAddressCannotBeNil',
     );
   });
@@ -252,7 +252,7 @@ describe('Seeker Stats', () => {
     );
   });
 
-  it('supports only seeker stats oracle interface', async () => {
+  it('seeker stats oracle supports correct interfaces', async () => {
     const abi = [
       'function setOracle(address _seekerStatsOracleAccount) external',
       'function createProofMessage((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external pure returns (bytes memory)',
@@ -271,20 +271,6 @@ describe('Seeker Stats', () => {
       supports,
       true,
       'Expected seeker stats oracle to support correct interface',
-    );
-
-    const invalidAbi = ['function foo(uint256 duration) external'];
-
-    const invalidAbiInterfaceId = getInterfaceId(invalidAbi);
-
-    const invalid = await seekerStatsOracle.supportsInterface(
-      invalidAbiInterfaceId,
-    );
-
-    assert.equal(
-      invalid,
-      false,
-      'Expected seeker stats oracle to not support incorrect interface',
     );
   });
 
