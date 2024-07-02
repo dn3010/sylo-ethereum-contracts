@@ -71,7 +71,9 @@ contract ProtocolTimeManager is
      * `interfaceId` from ERC165.
      */
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(IProtocolTimeManager).interfaceId;
+        return
+            interfaceId == type(IProtocolTimeManager).interfaceId ||
+            super.supportsInterface(interfaceId);
     }
 
     /**

@@ -13,7 +13,7 @@ interface ISeekerStatsOracle {
         uint256 attrChip;
     }
 
-    function setOracle(address _seekerStatsOracleAccount) external;
+    function setOracle(address _oracle) external;
 
     function createProofMessage(Seeker calldata seeker) external pure returns (bytes memory);
 

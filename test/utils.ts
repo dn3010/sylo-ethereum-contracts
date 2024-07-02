@@ -6,12 +6,15 @@ export type DeploymentOptions = {
   syloStakingManager?: {
     unlockDuration?: number;
   };
-  seekerStatsOralce?: {
+  seekerStatsOracle?: {
     oracleAccount?: Address;
   };
   protocolTimeManager?: {
     cycleDuration?: number;
     periodDuration?: number;
+  };
+  registries?: {
+    defaultPayoutPercentage: number;
   };
 };
 
@@ -33,6 +36,7 @@ export async function deployContracts(
   const protocolTimeManagerFactory = await ethers.getContractFactory(
     'ProtocolTimeManager',
   );
+  const registriesFactory = await ethers.getContractFactory('Registries');
 
   // Deploy
   const syloToken = await syloTokenFactory.deploy();
@@ -41,6 +45,7 @@ export async function deployContracts(
   const seekers = await seekersFactory.deploy();
   const seekerStakingManager = await seekerStakingManagerFactor.deploy();
   const protocolTimeManager = await protocolTimeManagerFactory.deploy();
+  const registries = await registriesFactory.deploy();
 
   // Options
   const syloStakingManagerOpts = {
@@ -48,12 +53,15 @@ export async function deployContracts(
   };
   const seekerStatsOracleOpts = {
     oracleAccount:
-      opts.seekerStatsOralce?.oracleAccount ??
+      opts.seekerStatsOracle?.oracleAccount ??
       '0xd9D6945dfe8c1C7aFaFcDF8bf1D1c5beDfeccABF',
   };
   const protocolTimeManagerOpts = {
     cycleDuration: opts.protocolTimeManager?.cycleDuration ?? 1000,
     periodDuration: opts.protocolTimeManager?.periodDuration ?? 100,
+  };
+  const registriesOpts = {
+    defaultPayoutPercentage: 5000,
   };
 
   // Initliaze
@@ -66,6 +74,7 @@ export async function deployContracts(
     await seekers.getAddress(),
     await seekerStatsOracle.getAddress(),
   );
+  await registries.initialize(registriesOpts.defaultPayoutPercentage);
   await protocolTimeManager.initialize(
     protocolTimeManagerOpts.cycleDuration,
     protocolTimeManagerOpts.periodDuration,
@@ -78,6 +87,7 @@ export async function deployContracts(
     seekerStakingManager,
     seekers,
     protocolTimeManager,
+    registries,
   };
 }
 

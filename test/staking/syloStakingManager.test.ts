@@ -500,7 +500,7 @@ describe('Sylo Staking', () => {
     );
   });
 
-  it('supports only sylo staking manager interface', async () => {
+  it('sylo staking manager supports correct interfaces', async () => {
     const abi = [
       'function setUnlockDuration(uint256 _unlockDuration) external',
       'function addStake(address node, uint256 amount) external',
@@ -521,6 +521,22 @@ describe('Sylo Staking', () => {
       supports,
       true,
       'Expected sylo staking manager to support correct interface',
+    );
+
+    const abiERC165 = [
+      'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
+    ];
+
+    const interfaceIdERC165 = getInterfaceId(abiERC165);
+
+    const supportsERC165 = await syloStakingManager.supportsInterface(
+      interfaceIdERC165,
+    );
+
+    assert.equal(
+      supportsERC165,
+      true,
+      'Expected sylo staking manager to support ERC165',
     );
 
     const invalidAbi = ['function foo(uint256 duration) external'];
