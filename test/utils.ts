@@ -4,6 +4,12 @@ import { Address } from 'hardhat-deploy/types';
 import { ProtocolTimeManager } from '../typechain-types';
 import { increaseTo } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
+export enum signatureTypes {
+  main,
+  authorizedAccount,
+  attachedAccount,
+}
+
 export type DeploymentOptions = {
   syloStakingManager?: {
     unlockDuration?: number;
@@ -134,6 +140,8 @@ export async function deployContracts(
 
   await deposits.initialize(
     await syloToken.getAddress(),
+    await rewardsManager.getAddress(),
+    await ticketing.getAddress(),
     depositsOpts.unlockDuration,
   );
 
@@ -176,6 +184,7 @@ export async function deployContracts(
     ticketing,
     stakingOrchestrator,
     directory,
+    futurepassRegistrar,
   };
 }
 

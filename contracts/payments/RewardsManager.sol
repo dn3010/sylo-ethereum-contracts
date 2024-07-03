@@ -23,11 +23,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     Registries public registries;
 
     /**
-     * @notice Ticketing contract
-     */
-    Ticketing public ticketing;
-
-    /**
      * @notice Tracks claims from staker accounts
      */
     mapping(address => mapping(address => uint256)) claims;
@@ -60,7 +55,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         }
 
         registries = _registries;
-        ticketing = _ticketing;
 
         _grantRole(onlyTicketing, address(_ticketing));
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);

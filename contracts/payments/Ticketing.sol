@@ -119,6 +119,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     );
 
     error FaceValueCannotBeZero();
+    error MultiReceiverFaceValueCannotBeZero();
     error TicketDurationCannotBeZero();
     error InvalidSigningPermission();
     error SenderCannotUseAttachedAuthorizedAccount();
@@ -127,6 +128,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     error TicketAlreadyUsed();
     error TicketEpochNotFound();
     error TicketAlreadyRedeemed();
+    error MultiReceiverTicketAlreadyRedeemed();
     error RedeemerCommitMismatch();
     error InvalidSignature();
     error TokenAddressCannotBeNil();
@@ -194,7 +196,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
 
     function setMultiReceiverFaceValue(uint256 _multiReceiverFaceValue) external onlyOwner {
         if (_multiReceiverFaceValue == 0) {
-            revert FaceValueCannotBeZero();
+            revert MultiReceiverFaceValueCannotBeZero();
         }
 
         multiReceiverFaceValue = _multiReceiverFaceValue;
@@ -336,15 +338,8 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         );
     }
 
-    function _redeemMultiReceiver(
-        MultiReceiverTicket calldata ticket,
-        address receiver
-    ) internal {
-        uint256 rewardAmount = rewardRedeemer(
-            ticket.cycle,
-            ticket.sender,
-            ticket.redeemer
-        );
+    function _redeemMultiReceiver(MultiReceiverTicket calldata ticket, address receiver) internal {
+        uint256 rewardAmount = rewardRedeemer(ticket.cycle, ticket.sender, ticket.redeemer);
 
         emit MultiReceiverRedemption(
             ticket.cycle,
@@ -367,19 +362,13 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
 
         if (faceValue > deposit.escrow) {
             amount = deposit.escrow;
-            incrementRewardPool(redeemer, cycle, deposit, amount);
-            SafeERC20.safeTransferFrom(
-                _token,
-                address(_deposits),
-                address(0x000000000000000000000000000000000000dEaD),
-                deposit.penalty
-            );
+            _deposits.removePenalty(sender);
+            incrementRewardPool(sender, redeemer, cycle, amount);
 
-            delete deposit.penalty;
             emit SenderPenaltyBurnt(sender);
         } else {
             amount = faceValue;
-            incrementRewardPool(redeemer, cycle, deposit, amount);
+            incrementRewardPool(sender, redeemer, cycle, amount);
         }
 
         return amount;
@@ -496,7 +485,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         ticketHash = getMultiReceiverTicketHash(ticket);
         ticketReceiverHash = keccak256(abi.encodePacked(ticketHash, futurepassAccount));
         if (usedTickets[ticketReceiverHash]) {
-            revert TicketAlreadyRedeemed();
+            revert MultiReceiverTicketAlreadyRedeemed();
         }
 
         // validate the redeemer has knowledge of the redeemer rand
@@ -608,9 +597,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
      * on the decay rate parameter of the epoch the ticket was generated in.
      * @param generationBlock The generationBlock of the ticket.
      */
-    function calculateWinningProbability(
-        uint256 generationBlock
-    ) public view returns (uint128) {
+    function calculateWinningProbability(uint256 generationBlock) public view returns (uint128) {
         uint256 elapsedDuration = block.number - generationBlock;
 
         // Ticket has completely expired
@@ -671,14 +658,12 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function incrementRewardPool(
+        address sender,
         address stakee,
         uint256 cycle,
-        IDeposits.Deposit memory deposit,
         uint256 amount
     ) internal {
-        deposit.escrow = deposit.escrow - amount;
-
-        SafeERC20.safeTransferFrom(_token, address(_deposits), address(_rewardsManager), amount);
+        _deposits.spendEscrow(sender, amount);
         _rewardsManager.incrementRewardPool(stakee, cycle, amount);
     }
 
