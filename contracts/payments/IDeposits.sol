@@ -16,6 +16,10 @@ interface IDeposits {
 
     function depositPenalty(uint256 amount, address account) external;
 
+    function removePenalty(address account) external;
+
+    function spendEscrow(address account, uint256 amount) external returns (uint256);
+
     function unlockDeposits() external returns (uint256);
 
     function lockDeposits() external;

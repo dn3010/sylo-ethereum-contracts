@@ -117,7 +117,7 @@ export async function deployContracts(
     multiReceiverFaceValue: opts.ticketing?.multiReceiverFaceValue ?? 1000n,
     baseLiveWinProb: opts.ticketing?.baseLiveWinProb ?? 2n ** 128n - 1n,
     expiredWinProb: opts.ticketing?.expiredWinProb ?? 2n ** 128n - 1n,
-    ticketDuration: opts.ticketing?.ticketDuration ?? 100n,
+    ticketDuration: opts.ticketing?.ticketDuration ?? 1000n,
     decayRate: opts.ticketing?.decayRate ?? 80000n,
   };
 

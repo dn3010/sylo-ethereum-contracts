@@ -1,9 +1,9 @@
 import { ethers } from 'hardhat';
 import { Wallet, BigNumberish, HDNodeWallet } from 'ethers';
 import { SyloContracts } from '../../common/contracts';
-import { deployContracts, signatureTypes } from '../utils';
+import { deployContracts, signatureTypes, getLatestBlock } from '../utils';
 import { ContractTransactionResponse, Signer } from 'ethers';
-import { expect, assert } from 'chai';
+import { expect } from 'chai';
 import {
   Deposits,
   Ticketing,
@@ -14,7 +14,7 @@ import {
 } from '../../typechain-types';
 import { mine } from '@nomicfoundation/hardhat-network-helpers';
 
-describe.only('Ticketing', () => {
+describe('Ticketing', () => {
   let accounts: Signer[];
   let contracts: SyloContracts;
   let deposits: Deposits;
@@ -23,6 +23,7 @@ describe.only('Ticketing', () => {
   let futurepass: TestFuturepassRegistrar;
   let insufficientEscrow: bigint;
   let sufficientEscrow: bigint;
+  let penalty: bigint;
 
   const redeemerRand = 1;
 
@@ -37,6 +38,7 @@ describe.only('Ticketing', () => {
     await ticketing.setBaseLiveWinProb(2n ** 128n - 1n);
     sufficientEscrow = (await ticketing.faceValue()) + BigInt(100);
     insufficientEscrow = (await ticketing.faceValue()) - BigInt(100);
+    penalty = BigInt(500);
   });
 
   it('cannot initialize deposits with invalid arguments', async () => {
@@ -608,7 +610,7 @@ describe.only('Ticketing', () => {
 
   it('successfully redeems a ticket', async () => {
     const block = await getLatestBlock();
-    const { alice, bob, redeemer } = await getUsers(sufficientEscrow);
+    const { alice, bob, redeemer } = await getUsers(sufficientEscrow, penalty);
 
     const { ticket, ticketHash } = await createTicket(
       1,
@@ -641,9 +643,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
+    await checkDeposit(sufficientEscrow, penalty, alice.address);
 
     await expect(ticketing.redeem(ticket, redeemerRand, senderSig, receiverSig))
       .to.emit(ticketing, 'Redemption')
@@ -656,12 +656,11 @@ describe.only('Ticketing', () => {
         await ticketing.faceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
+    await checkDeposit(
       sufficientEscrow - (await ticketing.faceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
 
     await expect(
       ticketing.redeem(ticket, redeemerRand, senderSig, receiverSig),
@@ -670,7 +669,10 @@ describe.only('Ticketing', () => {
 
   it('successfully redeems a ticket with penalty', async () => {
     const block = await getLatestBlock();
-    const { alice, bob, redeemer } = await getUsers(insufficientEscrow);
+    const { alice, bob, redeemer } = await getUsers(
+      insufficientEscrow,
+      penalty,
+    );
 
     const { ticket, ticketHash } = await createTicket(
       1,
@@ -703,9 +705,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], insufficientEscrow);
-    assert.equal(deposit[1], insufficientEscrow);
+    await checkDeposit(insufficientEscrow, penalty, alice.address);
 
     await expect(ticketing.redeem(ticket, redeemerRand, senderSig, receiverSig))
       .to.emit(ticketing, 'SenderPenaltyBurnt')
@@ -720,14 +720,13 @@ describe.only('Ticketing', () => {
         insufficientEscrow, // users deposit
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(depositAfter[0], 0n);
-    assert.equal(depositAfter[1], 0n);
+    await checkDeposit(0n, 0n, alice.address);
   });
 
   it('successfully redeems a ticket using sender authorized account', async () => {
     const { alice, aliceDelegated, bob, redeemer } = await getUsers(
       sufficientEscrow,
+      penalty,
     );
 
     await authorizedAccounts
@@ -767,9 +766,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
+    await checkDeposit(sufficientEscrow, penalty, alice.address);
 
     await expect(ticketing.redeem(ticket, redeemerRand, senderSig, receiverSig))
       .to.emit(ticketing, 'Redemption')
@@ -782,17 +779,17 @@ describe.only('Ticketing', () => {
         await ticketing.faceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
+    await checkDeposit(
       sufficientEscrow - (await ticketing.multiReceiverFaceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
   });
 
   it('successfully redeems a ticket using receiver authorized account', async () => {
     const { alice, bob, bobDelegated, redeemer } = await getUsers(
       sufficientEscrow,
+      penalty,
     );
 
     await authorizedAccounts
@@ -832,9 +829,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
+    await checkDeposit(sufficientEscrow, penalty, alice.address);
 
     await expect(ticketing.redeem(ticket, redeemerRand, senderSig, receiverSig))
       .to.emit(ticketing, 'Redemption')
@@ -847,18 +842,18 @@ describe.only('Ticketing', () => {
         await ticketing.faceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
+    await checkDeposit(
       sufficientEscrow - (await ticketing.faceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
   });
 
   it('successfully redeems a ticket using receiver attached authorized account', async () => {
     const block = await getLatestBlock();
     const { alice, bob, bobDelegated, redeemer } = await getUsers(
       sufficientEscrow,
+      penalty,
     );
 
     const proofMessage =
@@ -911,9 +906,7 @@ describe.only('Ticketing', () => {
       },
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
+    await checkDeposit(sufficientEscrow, penalty, alice.address);
 
     await expect(ticketing.redeem(ticket, redeemerRand, senderSig, receiverSig))
       .to.emit(ticketing, 'Redemption')
@@ -926,12 +919,11 @@ describe.only('Ticketing', () => {
         await ticketing.faceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
+    await checkDeposit(
       sufficientEscrow - (await ticketing.faceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
   });
 
   it('cannot redeem multireceiver ticket with future block', async () => {
@@ -1209,7 +1201,7 @@ describe.only('Ticketing', () => {
 
   it('successfully redeems a multireceiver ticket', async () => {
     const block = await getLatestBlock();
-    const { alice, bob, redeemer } = await getUsers(sufficientEscrow);
+    const { alice, bob, redeemer } = await getUsers(sufficientEscrow, penalty);
 
     const { multiReceiverTicket, multiReceiverTicketHash } =
       await createMultiReceiverTicket(
@@ -1242,9 +1234,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
+    await checkDeposit(sufficientEscrow, penalty, alice.address);
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1265,12 +1255,11 @@ describe.only('Ticketing', () => {
         await ticketing.multiReceiverFaceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
-      sufficientEscrow - (await ticketing.multiReceiverFaceValue()),
+    await checkDeposit(
+      sufficientEscrow - (await ticketing.faceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1288,7 +1277,10 @@ describe.only('Ticketing', () => {
 
   it('successfully redeems a multireceiver ticket with penalty', async () => {
     const block = await getLatestBlock();
-    const { alice, bob, redeemer } = await getUsers(insufficientEscrow);
+    const { alice, bob, redeemer } = await getUsers(
+      insufficientEscrow,
+      penalty,
+    );
 
     const { multiReceiverTicket, multiReceiverTicketHash } =
       await createMultiReceiverTicket(
@@ -1321,9 +1313,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], insufficientEscrow);
-    assert.equal(deposit[1], insufficientEscrow);
+    await checkDeposit(insufficientEscrow, penalty, alice.address);
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1346,14 +1336,13 @@ describe.only('Ticketing', () => {
         insufficientEscrow, // users deposit
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(depositAfter[0], 0n);
-    assert.equal(depositAfter[1], 0n);
+    await checkDeposit(0n, 0n, alice.address);
   });
 
   it('successfully redeems a multireceiver ticket using sender authorized account', async () => {
     const { alice, aliceDelegated, bob, redeemer } = await getUsers(
       sufficientEscrow,
+      penalty,
     );
 
     await authorizedAccounts
@@ -1393,9 +1382,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
+    await checkDeposit(sufficientEscrow, penalty, alice.address);
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1416,17 +1403,17 @@ describe.only('Ticketing', () => {
         await ticketing.multiReceiverFaceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
+    await checkDeposit(
       sufficientEscrow - (await ticketing.multiReceiverFaceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
   });
 
   it('successfully redeems a multireceiver ticket using receiver authorized account', async () => {
     const { alice, bob, bobDelegated, redeemer } = await getUsers(
       sufficientEscrow,
+      penalty,
     );
 
     await authorizedAccounts
@@ -1466,10 +1453,6 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
-
     await expect(
       ticketing.redeemMultiReceiver(
         multiReceiverTicket,
@@ -1489,18 +1472,18 @@ describe.only('Ticketing', () => {
         await ticketing.multiReceiverFaceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
+    await checkDeposit(
       sufficientEscrow - (await ticketing.multiReceiverFaceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
   });
 
   it('successfully redeems a multireceiver ticket using receiver attached authorized account', async () => {
     const block = await getLatestBlock();
     const { alice, bob, bobDelegated, redeemer } = await getUsers(
       sufficientEscrow,
+      penalty,
     );
 
     const proofMessage =
@@ -1553,9 +1536,7 @@ describe.only('Ticketing', () => {
       },
     );
 
-    const deposit = await deposits.getDeposit(alice.address);
-    assert.equal(deposit[0], sufficientEscrow);
-    assert.equal(deposit[1], sufficientEscrow);
+    await checkDeposit(sufficientEscrow, penalty, alice.address);
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1576,17 +1557,16 @@ describe.only('Ticketing', () => {
         await ticketing.multiReceiverFaceValue(),
       );
 
-    const depositAfter = await deposits.getDeposit(alice.address);
-    assert.equal(
-      depositAfter[0],
+    await checkDeposit(
       sufficientEscrow - (await ticketing.multiReceiverFaceValue()),
+      penalty,
+      alice.address,
     );
-    assert.equal(depositAfter[1], sufficientEscrow);
   });
 
   it('reverts if ticket duration has elapsed', async () => {
     const block = await getLatestBlock();
-    const { alice, bob, redeemer } = await getUsers(sufficientEscrow);
+    const { alice, bob, redeemer } = await getUsers(sufficientEscrow, penalty);
 
     const { multiReceiverTicket, multiReceiverTicketHash } =
       await createMultiReceiverTicket(
@@ -1619,7 +1599,7 @@ describe.only('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    await mine(101);
+    await mine((await ticketing.ticketDuration()) + BigInt(10));
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1682,54 +1662,10 @@ describe.only('Ticketing', () => {
     return { multiReceiverTicket, multiReceiverTicketHash };
   }
 
-  function createUserSignature(
-    sigType: number,
-    signature: string,
-    authorizedAccount: string,
-    attachedAuthorizedAccount: IAuthorizedAccounts.AttachedAuthorizedAccountStruct,
-  ): ITicketing.UserSignatureStruct {
-    const newSig: ITicketing.UserSignatureStruct = {
-      sigType: sigType,
-      signature: signature,
-      authorizedAccount: authorizedAccount,
-      attachedAuthorizedAccount: attachedAuthorizedAccount,
-    };
-
-    return newSig;
-  }
-
-  function createEmptyAttachedAuthorizedAccount(): IAuthorizedAccounts.AttachedAuthorizedAccountStruct {
-    return {
-      account: ethers.ZeroAddress,
-      expiry: 0,
-      proof: new Uint8Array(),
-      prefix: '',
-      suffix: '',
-      infixOne: '',
-    };
-  }
-
-  function createCommit(generationBlock: bigint, rand: BigNumberish): string {
-    return ethers.solidityPackedKeccak256(
-      ['bytes32'],
-      [
-        ethers.solidityPackedKeccak256(
-          ['uint256', 'uint256'],
-          [generationBlock, rand],
-        ),
-      ],
-    );
-  }
-
-  async function getLatestBlock() {
-    const block = await ethers.provider.getBlock('latest').then(b => {
-      if (!b) throw new Error('block undefined');
-      return b;
-    });
-    return block;
-  }
-
-  async function getUsers(depositAmount?: bigint): Promise<{
+  async function getUsers(
+    escrowAmount?: bigint,
+    penaltyAmount?: bigint,
+  ): Promise<{
     alice: HDNodeWallet;
     bob: Signer;
     aliceDelegated: HDNodeWallet;
@@ -1748,14 +1684,14 @@ describe.only('Ticketing', () => {
 
     await futurepass.create(await bob.getAddress());
 
-    depositAmount &&
+    escrowAmount &&
       (await deposits
         .connect(alice)
-        .depositEscrow(depositAmount, alice.address));
-    depositAmount &&
+        .depositEscrow(escrowAmount, alice.address));
+    penaltyAmount &&
       (await deposits
         .connect(alice)
-        .depositPenalty(depositAmount, alice.address));
+        .depositPenalty(penaltyAmount, alice.address));
 
     return {
       alice,
@@ -1781,4 +1717,121 @@ describe.only('Ticketing', () => {
 
     return user;
   };
+
+  const checkDeposit = async (
+    escrow: bigint,
+    penalty: bigint,
+    user: string,
+  ) => {
+    const deposit = await deposits.getDeposit(user);
+
+    expect(deposit.escrow).to.equal(escrow);
+    expect(deposit.penalty).to.equal(penalty);
+  };
 });
+
+function createEmptyAttachedAuthorizedAccount(): IAuthorizedAccounts.AttachedAuthorizedAccountStruct {
+  return {
+    account: ethers.ZeroAddress,
+    expiry: 0,
+    proof: new Uint8Array(),
+    prefix: '',
+    suffix: '',
+    infixOne: '',
+  };
+}
+
+function createUserSignature(
+  sigType: number,
+  signature: string,
+  authorizedAccount: string,
+  attachedAuthorizedAccount: IAuthorizedAccounts.AttachedAuthorizedAccountStruct,
+): ITicketing.UserSignatureStruct {
+  const newSig: ITicketing.UserSignatureStruct = {
+    sigType: sigType,
+    signature: signature,
+    authorizedAccount: authorizedAccount,
+    attachedAuthorizedAccount: attachedAuthorizedAccount,
+  };
+
+  return newSig;
+}
+
+function createCommit(generationBlock: bigint, rand: BigNumberish): string {
+  return ethers.solidityPackedKeccak256(
+    ['bytes32'],
+    [
+      ethers.solidityPackedKeccak256(
+        ['uint256', 'uint256'],
+        [generationBlock, rand],
+      ),
+    ],
+  );
+}
+
+export async function redeemTicket(
+  ticketingContract: Ticketing,
+  depositsContract: Deposits,
+  ticket: {
+    sender: HDNodeWallet;
+    receiver: Signer;
+    redeemer: Signer;
+    redeemerRand: number;
+    cycle: number;
+  },
+  escrowAmount?: bigint,
+  penaltyAmount?: bigint,
+): Promise<void> {
+  escrowAmount &&
+    (await depositsContract
+      .connect(ticket.sender)
+      .depositEscrow(escrowAmount, ticket.sender.address));
+  penaltyAmount &&
+    (await depositsContract
+      .connect(ticket.sender)
+      .depositPenalty(penaltyAmount, ticket.sender.address));
+
+  const block = await getLatestBlock();
+  const newTicket: ITicketing.TicketStruct = {
+    cycle: ticket.cycle,
+    sender: ticket.sender,
+    receiver: ticket.receiver,
+    redeemer: ticket.redeemer,
+    generationBlock: block.number,
+    redeemerCommit: ethers.zeroPadBytes(
+      createCommit(BigInt(block.number), ticket.redeemerRand),
+      32,
+    ),
+  };
+
+  const ticketHash = await ticketingContract.getTicketHash(newTicket);
+
+  const senderSignature = await ticket.sender.signMessage(
+    ethers.getBytes(ticketHash),
+  );
+
+  const receiverSignature = await ticket.receiver.signMessage(
+    ethers.getBytes(ticketHash),
+  );
+
+  const senderSig = createUserSignature(
+    signatureTypes.main,
+    senderSignature,
+    ethers.ZeroAddress,
+    createEmptyAttachedAuthorizedAccount(),
+  );
+
+  const receiverSig = createUserSignature(
+    signatureTypes.main,
+    receiverSignature,
+    ethers.ZeroAddress,
+    createEmptyAttachedAuthorizedAccount(),
+  );
+
+  await ticketingContract.redeem(
+    newTicket,
+    ticket.redeemerRand,
+    senderSig,
+    receiverSig,
+  );
+}

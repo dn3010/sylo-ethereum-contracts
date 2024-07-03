@@ -1,51 +1,84 @@
 import { ethers } from 'hardhat';
 import { SyloContracts } from '../../common/contracts';
-import { deployContracts, getBlockNumber, MAX, MAX_SYLO } from '../utils';
+import { deployContracts, getLatestBlock } from '../utils';
 import { Signer } from 'ethers';
 import { expect, assert } from 'chai';
-import { Deposits } from '../../typechain-types';
+import {
+  Deposits,
+  RewardsManager,
+  Ticketing,
+  SyloToken,
+} from '../../typechain-types';
+import { mine } from '@nomicfoundation/hardhat-network-helpers';
 
 describe('Deposits', () => {
   let accounts: Signer[];
   let contracts: SyloContracts;
   let deposits: Deposits;
+  let rewardsManager: RewardsManager;
+  let ticketing: Ticketing;
+  let token: SyloToken;
+
+  const onlyTicketingRole = ethers.keccak256(Buffer.from('ONLY_TICKETING'));
 
   beforeEach(async () => {
     accounts = await ethers.getSigners();
     contracts = await deployContracts();
     deposits = contracts.deposits;
+    rewardsManager = contracts.rewardsManager;
+    ticketing = contracts.ticketing;
+    token = contracts.syloToken;
   });
 
   it('cannot initialize deposits with invalid arguments', async () => {
     const factory = await ethers.getContractFactory('Deposits');
-    const deposits = await factory.deploy();
+    const depositsTemp = await factory.deploy();
 
     await expect(
-      deposits.initialize(ethers.ZeroAddress, 100n),
+      depositsTemp.initialize(
+        ethers.ZeroAddress,
+        ethers.ZeroAddress,
+        ethers.ZeroAddress,
+        100n,
+      ),
     ).to.be.revertedWithCustomError(deposits, 'TokenAddressCannotBeNil');
 
     await expect(
-      deposits.initialize(contracts.syloToken.getAddress(), 0n),
+      depositsTemp.initialize(
+        await token.getAddress(),
+        ethers.ZeroAddress,
+        ethers.ZeroAddress,
+        100n,
+      ),
+    ).to.be.revertedWithCustomError(
+      deposits,
+      'RewardsManagerAddressCannotBeNil',
+    );
+
+    await expect(
+      depositsTemp.initialize(
+        await token.getAddress(),
+        await rewardsManager.getAddress(),
+        ethers.ZeroAddress,
+        100n,
+      ),
+    ).to.be.revertedWithCustomError(deposits, 'TicketingAddressCannotBeNil');
+
+    await expect(
+      depositsTemp.initialize(
+        await token.getAddress(),
+        await rewardsManager.getAddress(),
+        await ticketing.getAddress(),
+        0n,
+      ),
     ).to.be.revertedWithCustomError(deposits, 'UnlockDurationCannotBeZero');
   });
 
-  it('can approve ticketing contract as owner', async () => {
-    await deposits.approveTicketing(contracts.ticketing.getAddress());
-
-    const allowance = await contracts.syloToken.allowance(
-      deposits.getAddress(),
-      contracts.ticketing.getAddress(),
+  it('cannot set zero unlock duration', async () => {
+    await expect(deposits.setUnlockDuration(0n)).to.be.revertedWithCustomError(
+      deposits,
+      'UnlockDurationCannotBeZero',
     );
-
-    assert.equal(allowance, MAX_SYLO);
-  });
-
-  it('only allows owner to approve ticketing', async () => {
-    await expect(
-      deposits
-        .connect(accounts[1])
-        .approveTicketing(contracts.ticketing.getAddress()),
-    ).to.be.revertedWith('Ownable: caller is not the owner');
   });
 
   it('can set unlock duration', async () => {
@@ -62,10 +95,30 @@ describe('Deposits', () => {
     ).to.be.revertedWith('Ownable: caller is not the owner');
   });
 
+  it('only allows ticketing to remove penalty', async () => {
+    await expect(deposits.removePenalty(ethers.ZeroAddress)).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[0].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        onlyTicketingRole,
+    );
+  });
+
+  it('only allows ticketing to spend escrow', async () => {
+    await expect(
+      deposits.spendEscrow(ethers.ZeroAddress, 0n),
+    ).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[0].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        onlyTicketingRole,
+    );
+  });
+
   it('allows a user to deposit escrow', async () => {
     const user = await setupUser();
 
-    await contracts.deposits.connect(user).depositEscrow(1111n, user.address);
+    await deposits.connect(user).depositEscrow(1111n, user.address);
 
     await checkDeposit(1111n, 0n, user.address);
   });
@@ -74,26 +127,20 @@ describe('Deposits', () => {
     const user = await setupUser();
 
     await expect(
-      contracts.deposits.connect(user).depositEscrow(0n, user.address),
-    ).to.be.revertedWithCustomError(
-      contracts.deposits,
-      'EscrowAmountCannotBeZero',
-    );
+      deposits.connect(user).depositEscrow(0n, user.address),
+    ).to.be.revertedWithCustomError(deposits, 'EscrowAmountCannotBeZero');
   });
 
   it('cannot deposit escrow to zero address', async () => {
     await expect(
-      contracts.deposits.depositEscrow(111n, ethers.ZeroAddress),
-    ).to.be.revertedWithCustomError(
-      contracts.deposits,
-      'AccountCannotBeZeroAddress',
-    );
+      deposits.depositEscrow(111n, ethers.ZeroAddress),
+    ).to.be.revertedWithCustomError(deposits, 'AccountCannotBeZeroAddress');
   });
 
   it('can deposit penalty', async () => {
     const user = await setupUser();
 
-    await contracts.deposits.connect(user).depositPenalty(1111n, user.address);
+    await deposits.connect(user).depositPenalty(1111n, user.address);
 
     await checkDeposit(0n, 1111n, user.address);
   });
@@ -102,29 +149,23 @@ describe('Deposits', () => {
     const user = await setupUser();
 
     await expect(
-      contracts.deposits.connect(user).depositPenalty(0n, user.address),
-    ).to.be.revertedWithCustomError(
-      contracts.deposits,
-      'PenaltyAmountCannotBeZero',
-    );
+      deposits.connect(user).depositPenalty(0n, user.address),
+    ).to.be.revertedWithCustomError(deposits, 'PenaltyAmountCannotBeZero');
   });
 
   it('cannot deposit penalty to zero address', async () => {
     const user = await setupUser();
 
     await expect(
-      contracts.deposits.connect(user).depositEscrow(111n, ethers.ZeroAddress),
-    ).to.be.revertedWithCustomError(
-      contracts.deposits,
-      'AccountCannotBeZeroAddress',
-    );
+      deposits.connect(user).depositPenalty(111n, ethers.ZeroAddress),
+    ).to.be.revertedWithCustomError(deposits, 'AccountCannotBeZeroAddress');
   });
 
   it('can deposit both escrow and penalty', async () => {
     const user = await setupUser();
 
-    await contracts.deposits.connect(user).depositEscrow(555n, user.address);
-    await contracts.deposits.connect(user).depositPenalty(666n, user.address);
+    await deposits.connect(user).depositEscrow(555n, user.address);
+    await deposits.connect(user).depositPenalty(666n, user.address);
 
     await checkDeposit(555n, 666n, user.address);
   });
@@ -137,8 +178,8 @@ describe('Deposits', () => {
     );
 
     for (const user of users) {
-      await contracts.deposits.connect(user).depositEscrow(222n, user.address);
-      await contracts.deposits.connect(user).depositPenalty(333n, user.address);
+      await deposits.connect(user).depositEscrow(222n, user.address);
+      await deposits.connect(user).depositPenalty(333n, user.address);
     }
 
     for (const user of users) {
@@ -156,12 +197,8 @@ describe('Deposits', () => {
       const escrow = i;
       const penalty = i * 2;
 
-      await contracts.deposits
-        .connect(user)
-        .depositEscrow(escrow, user.address);
-      await contracts.deposits
-        .connect(user)
-        .depositPenalty(penalty, user.address);
+      await deposits.connect(user).depositEscrow(escrow, user.address);
+      await deposits.connect(user).depositPenalty(penalty, user.address);
 
       totalEscrow += escrow;
       totalPenalty += penalty;
@@ -173,78 +210,114 @@ describe('Deposits', () => {
   it('can allow user to start unlocking deposits', async () => {
     const user = await setupUser();
 
-    await contracts.deposits.connect(user).depositEscrow(222n, user.address);
-    await contracts.deposits.connect(user).depositPenalty(333n, user.address);
+    await deposits.connect(user).depositEscrow(222n, user.address);
+    await deposits.connect(user).depositPenalty(333n, user.address);
 
-    await contracts.deposits.connect(user).unlockDeposits();
+    await deposits.connect(user).unlockDeposits();
 
-    const blockNumber = await getBlockNumber();
+    const blockNumber = await getLatestBlock();
 
     await checkUnlocking(
-      blockNumber + (await contracts.deposits.unlockDuration().then(Number)),
+      blockNumber.number + (await deposits.unlockDuration().then(Number)),
       user.address,
     );
   });
 
   it('cannot unlock zero deposit', async () => {
-    await expect(
-      contracts.deposits.unlockDeposits(),
-    ).to.be.revertedWithCustomError(contracts.deposits, 'NoEscrowAndPenalty');
+    await expect(deposits.unlockDeposits()).to.be.revertedWithCustomError(
+      deposits,
+      'NoEscrowAndPenalty',
+    );
   });
 
   it('cannot unlock while unlocking is in process', async () => {
     const user = await setupUser();
 
-    await contracts.deposits.connect(user).depositEscrow(222n, user.address);
-    await contracts.deposits.connect(user).depositPenalty(333n, user.address);
+    await deposits.connect(user).depositEscrow(222n, user.address);
+    await deposits.connect(user).depositPenalty(333n, user.address);
 
-    await contracts.deposits.connect(user).unlockDeposits();
+    await deposits.connect(user).unlockDeposits();
 
     await expect(
-      contracts.deposits.connect(user).unlockDeposits(),
-    ).to.be.revertedWithCustomError(contracts.deposits, 'UnlockingInProcess');
+      deposits.connect(user).unlockDeposits(),
+    ).to.be.revertedWithCustomError(deposits, 'UnlockingInProcess');
   });
 
   it('cannot deposit while unlocking is in process', async () => {
     const user = await setupUser();
 
-    await contracts.deposits.connect(user).depositEscrow(222n, user.address);
-    await contracts.deposits.connect(user).depositPenalty(333n, user.address);
+    await deposits.connect(user).depositEscrow(222n, user.address);
+    await deposits.connect(user).depositPenalty(333n, user.address);
 
-    await contracts.deposits.connect(user).unlockDeposits();
-
-    await expect(
-      contracts.deposits.connect(user).depositEscrow(1n, user.address),
-    ).to.be.revertedWithCustomError(contracts.deposits, 'UnlockingInProcess');
+    await deposits.connect(user).unlockDeposits();
 
     await expect(
-      contracts.deposits.connect(user).depositPenalty(1n, user.address),
-    ).to.be.revertedWithCustomError(contracts.deposits, 'UnlockingInProcess');
+      deposits.connect(user).depositEscrow(1n, user.address),
+    ).to.be.revertedWithCustomError(deposits, 'UnlockingInProcess');
+
+    await expect(
+      deposits.connect(user).depositPenalty(1n, user.address),
+    ).to.be.revertedWithCustomError(deposits, 'UnlockingInProcess');
   });
 
   it('can cancel unlocking', async () => {
     const user = await setupUser();
 
-    await contracts.deposits.connect(user).depositEscrow(222n, user.address);
-    await contracts.deposits.connect(user).depositPenalty(333n, user.address);
+    await deposits.connect(user).depositEscrow(222n, user.address);
+    await deposits.connect(user).depositPenalty(333n, user.address);
 
-    await contracts.deposits.connect(user).unlockDeposits();
-    await contracts.deposits.connect(user).lockDeposits();
+    await deposits.connect(user).unlockDeposits();
+    await deposits.connect(user).lockDeposits();
 
     await checkUnlocking(0, user.address);
 
     // confirm user can deposit escrow/penalty again
-    await contracts.deposits.connect(user).depositEscrow(1n, user.address);
-    await contracts.deposits.connect(user).depositPenalty(1n, user.address);
+    await deposits.connect(user).depositEscrow(1n, user.address);
+    await deposits.connect(user).depositPenalty(1n, user.address);
   });
 
   it('cannot cancel unlocking if not in process', async () => {
-    await expect(
-      contracts.deposits.lockDeposits(),
-    ).to.be.revertedWithCustomError(
-      contracts.deposits,
+    await expect(deposits.lockDeposits()).to.be.revertedWithCustomError(
+      deposits,
       'UnlockingNotInProcess',
     );
+  });
+
+  it('cannot withdraw if unlocking not in progress', async () => {
+    await expect(deposits.withdraw()).to.be.revertedWithCustomError(
+      deposits,
+      'UnlockingNotInProcess',
+    );
+  });
+
+  it('cannot withdraw if unlocking is not complete', async () => {
+    const user = await setupUser();
+
+    await deposits.connect(user).depositEscrow(222n, user.address);
+    await deposits.connect(user).depositPenalty(333n, user.address);
+
+    await deposits.connect(user).unlockDeposits();
+
+    await expect(
+      deposits.connect(user).withdraw(),
+    ).to.be.revertedWithCustomError(deposits, 'UnlockingNotCompleted');
+  });
+
+  it('can unlock and withdraw deposit', async () => {
+    const user = await setupUser();
+
+    await deposits.connect(user).depositEscrow(222n, user.address);
+    await deposits.connect(user).depositPenalty(333n, user.address);
+
+    await checkDeposit(222n, 333n, user.address);
+
+    await deposits.connect(user).unlockDeposits();
+
+    await mine((await deposits.unlockDuration()) + BigInt(1));
+
+    await deposits.connect(user).withdraw();
+
+    await checkDeposit(0n, 0n, user.address);
   });
 
   const setupUser = async (tokenBalance = 1_000_000n) => {
@@ -258,7 +331,7 @@ describe('Deposits', () => {
     await contracts.syloToken.transfer(user.address, tokenBalance);
     await contracts.syloToken
       .connect(user)
-      .approve(contracts.deposits.getAddress(), tokenBalance);
+      .approve(await deposits.getAddress(), tokenBalance);
 
     return user;
   };
@@ -268,14 +341,14 @@ describe('Deposits', () => {
     penalty: bigint,
     user: string,
   ) => {
-    const deposit = await contracts.deposits.getDeposit(user);
+    const deposit = await deposits.getDeposit(user);
 
     expect(deposit.escrow).to.equal(escrow);
     expect(deposit.penalty).to.equal(penalty);
   };
 
   const checkUnlocking = async (unlockAt: number, user: string) => {
-    const deposit = await contracts.deposits.getDeposit(user);
+    const deposit = await deposits.getDeposit(user);
 
     expect(deposit.unlockAt).to.equal(unlockAt);
   };

@@ -82,9 +82,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         uint256 cycle,
         uint256 amount
     ) external onlyRole(onlyTicketing) {
-        if (address(0) == node) {
-            revert CannotIncrementRewardPoolWithZeroNodeAddress();
-        }
         if (amount == 0) {
             revert CannotIncrementRewardPoolWithZeroAmount();
         }
@@ -116,7 +113,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     ) external view returns (uint256[] memory) {
         uint256[] memory rewards = new uint256[](cycles.length);
         for (uint i = 0; i < cycles.length; i++) {
-            rewards[i] = rewardPools[node][i];
+            rewards[i] = rewardPools[node][cycles[i]];
         }
         return rewards;
     }

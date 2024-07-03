@@ -17,6 +17,7 @@ export const DeployedContractNames = {
   stakingOrchestrator: 'StakingOrchestrator',
   direcrory: 'Directory',
   futurepass: 'FuturepassRegistrar',
+  deposits: 'Deposits',
 };
 
 export const ContractNames = {
@@ -33,11 +34,12 @@ export type SyloContracts = {
   protocolTimeManager: factories.contracts.ProtocolTimeManager;
   registries: factories.contracts.Registries;
   authorizedAccounts: factories.contracts.AuthorizedAccounts;
-  rewardsManager: factories.contracts.RewardsManager;
-  ticketing: factories.contracts.Ticketing;
+  rewardsManager: factories.contracts.payments.RewardsManager;
+  ticketing: factories.contracts.payments.Ticketing;
   stakingOrchestrator: factories.contracts.staking.StakingOrchestrator;
   directory: factories.contracts.Directory;
   futurepassRegistrar: factories.contracts.mocks.TestFuturepassRegistrar;
+  deposits: factories.contracts.payments.Deposits;
 };
 
 export type ContractAddresses = {
@@ -50,7 +52,6 @@ export type ContractAddresses = {
   registries: string;
   authorizedAccounts: string;
   deposits: string;
-  ticketing: string;
   rewardsManager: string;
   ticketing: string;
   stakingOrchestator: string;
@@ -128,6 +129,11 @@ export function connectContracts(
       provider,
     );
 
+  const rewardsManager = factories.RewardsManager__factory.connect(
+    contracts.rewardsManager,
+    provider,
+  );
+
   return {
     syloToken,
     syloStakingManager,
@@ -140,7 +146,6 @@ export function connectContracts(
     deposits,
     ticketing,
     rewardsManager,
-    ticketing,
     stakingOrchestrator,
     directory,
     futurepassRegistrar,

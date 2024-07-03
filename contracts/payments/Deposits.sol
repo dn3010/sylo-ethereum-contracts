@@ -8,12 +8,26 @@ import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 import "../libraries/SyloUtils.sol";
 
-contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
+import "./RewardsManager.sol";
+import "./Ticketing.sol";
+
+contract Deposits is IDeposits, Initializable, Ownable, AccessControl {
+    /**
+     * @notice The only ticketing role given to the ticketing contract
+     * to restrict access to the deposit management functions
+     */
+    bytes32 public constant onlyTicketing = keccak256("ONLY_TICKETING");
+
     /** ERC20 Sylo token contract.*/
-    IERC20 public _token;
+    IERC20 public token;
+
+    /** RewardsManager contract */
+    RewardsManager public rewardsManager;
 
     /**
      * @notice The number of blocks a user must wait after calling "unlock"
@@ -27,6 +41,8 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
     event UnlockDurationUpdated(uint256 unlockDuration);
 
     error TokenAddressCannotBeNil();
+    error RewardsManagerAddressCannotBeNil();
+    error TicketingAddressCannotBeNil();
     error NoEscrowAndPenalty();
     error UnlockingInProcess();
     error UnlockingNotInProcess();
@@ -36,29 +52,30 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
     error UnlockDurationCannotBeZero();
     error AccountCannotBeZeroAddress();
 
-    function initialize(IERC20 token, uint256 _unlockDuration) external initializer {
-        if (address(token) == address(0)) {
+    function initialize(
+        IERC20 _token,
+        RewardsManager _rewardsManager,
+        Ticketing _ticketing,
+        uint256 _unlockDuration
+    ) external initializer {
+        if (address(_token) == address(0)) {
             revert TokenAddressCannotBeNil();
         }
-
+        if (address(_rewardsManager) == address(0)) {
+            revert RewardsManagerAddressCannotBeNil();
+        }
+        if (address(_ticketing) == address(0)) {
+            revert TicketingAddressCannotBeNil();
+        }
         if (_unlockDuration == 0) {
             revert UnlockDurationCannotBeZero();
         }
 
-        Ownable2StepUpgradeable.__Ownable2Step_init();
-
-        _token = token;
-
+        token = _token;
+        rewardsManager = _rewardsManager;
         unlockDuration = _unlockDuration;
-    }
 
-    /**
-     * @notice Call this to allow the ticketing contract to spend from
-     * the deposit's account. Only callable by the owner.
-     * @param ticketing The address of the ticketing contract.
-     */
-    function approveTicketing(address ticketing) external onlyOwner {
-        _token.approve(ticketing, SyloUtils.MAX_SYLO);
+        _grantRole(onlyTicketing, address(_ticketing));
     }
 
     /**
@@ -105,7 +122,7 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
 
         deposit.escrow = deposit.escrow + amount;
 
-        SafeERC20.safeTransferFrom(_token, msg.sender, address(this), amount);
+        SafeERC20.safeTransferFrom(token, msg.sender, address(this), amount);
     }
 
     /**
@@ -130,7 +147,33 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
 
         deposit.penalty = deposit.penalty + amount;
 
-        SafeERC20.safeTransferFrom(_token, msg.sender, address(this), amount);
+        SafeERC20.safeTransferFrom(token, msg.sender, address(this), amount);
+    }
+
+    /**
+     * @notice Delete the penalty for a given account
+     * @param account The ethereum account to delete penalty for
+     */
+    function removePenalty(address account) external onlyRole(onlyTicketing) {
+        SafeERC20.safeTransfer(
+            token,
+            address(0x000000000000000000000000000000000000dEaD),
+            deposits[account].penalty
+        );
+        delete deposits[account].penalty;
+    }
+
+    /**
+     * @notice Delete spend escrow for the given account
+     * @param account The ethereum account to spend from
+     */
+    function spendEscrow(
+        address account,
+        uint256 amount
+    ) external onlyRole(onlyTicketing) returns (uint256) {
+        SafeERC20.safeTransfer(token, address(rewardsManager), amount);
+        deposits[account].escrow -= amount;
+        return deposits[account].escrow;
     }
 
     /**
@@ -195,6 +238,6 @@ contract Deposits is IDeposits, Initializable, Ownable2StepUpgradeable, ERC165 {
         // Reset deposit values to 0
         delete deposits[msg.sender];
 
-        SafeERC20.safeTransfer(_token, account, amount);
+        SafeERC20.safeTransfer(token, account, amount);
     }
 }

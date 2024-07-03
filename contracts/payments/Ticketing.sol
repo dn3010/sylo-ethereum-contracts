@@ -666,8 +666,4 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         _deposits.spendEscrow(sender, amount);
         _rewardsManager.incrementRewardPool(stakee, cycle, amount);
     }
-
-    function testerIncrementRewardPool(address node, uint256 cycle, uint256 amount) external {
-        _rewardsManager.incrementRewardPool(node, cycle, amount);
-    }
 }
