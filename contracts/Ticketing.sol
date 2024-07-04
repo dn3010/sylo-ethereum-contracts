@@ -28,10 +28,6 @@ contract Ticketing is ITicketing, Ownable2StepUpgradeable, ERC165 {
      * `interfaceId` from ERC165.
      */
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(ITicketing).interfaceId || super.supportsInterface(interfaceId);
-    }
-
-    function testerIncrementRewardPool(address node, uint256 cycle, uint256 amount) external {
-        rewardsManager.incrementRewardPool(node, cycle, amount);
+        return interfaceId == type(ITicketing).interfaceId;
     }
 }

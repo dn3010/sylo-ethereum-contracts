@@ -3,7 +3,7 @@ import { SyloContracts } from '../common/contracts';
 import { deployContracts } from './utils';
 import { Signer } from 'ethers';
 import { expect, assert } from 'chai';
-import { Registries, RewardsManager, Ticketing } from '../typechain-types';
+import { Registries, RewardsManager } from '../typechain-types';
 import { getInterfaceId } from './utils';
 
 describe('Rewards Manager', () => {
@@ -11,7 +11,6 @@ describe('Rewards Manager', () => {
   let contracts: SyloContracts;
   let rewardsManager: RewardsManager;
   let registries: Registries;
-  let ticketing: Ticketing;
   let deployer: Signer;
   let node1: Signer;
   let node2: Signer;
@@ -23,10 +22,14 @@ describe('Rewards Manager', () => {
     contracts = await deployContracts();
     rewardsManager = contracts.rewardsManager;
     registries = contracts.registries;
-    ticketing = contracts.ticketing;
     deployer = accounts[0];
     node1 = accounts[10];
     node2 = accounts[11];
+
+    await rewardsManager.grantRole(
+      onlyTicketingRole,
+      await deployer.getAddress(),
+    );
   });
 
   it('TEMP TEST for coverage', async () => {
@@ -45,7 +48,7 @@ describe('Rewards Manager', () => {
       rewardsManagerTemp.initialize(ethers.ZeroAddress, ethers.ZeroAddress),
     ).to.be.revertedWithCustomError(
       rewardsManagerTemp,
-      'CannotInitializeEmptyRegistriesAddress',
+      'RegistriesAddressCannotBeNil',
     );
   });
 
@@ -62,7 +65,7 @@ describe('Rewards Manager', () => {
       ),
     ).to.be.revertedWithCustomError(
       rewardsManagerTemp,
-      'CannotInitializeEmptyTicketingAddress',
+      'TicketingAddressCannotBeNil',
     );
   });
 
@@ -85,10 +88,12 @@ describe('Rewards Manager', () => {
 
   it('cannot increment reward pool without only ticketing role', async () => {
     await expect(
-      rewardsManager.incrementRewardPool(ethers.ZeroAddress, 0, 0),
+      rewardsManager
+        .connect(accounts[1])
+        .incrementRewardPool(ethers.ZeroAddress, 0, 0),
     ).to.be.revertedWith(
       'AccessControl: account ' +
-        (await deployer.getAddress()).toLowerCase() +
+        (await accounts[1].getAddress()).toLowerCase() +
         ' is missing role ' +
         onlyTicketingRole,
     );
@@ -96,7 +101,7 @@ describe('Rewards Manager', () => {
 
   it('cannot increment reward pool with invalid node address', async () => {
     await expect(
-      ticketing.testerIncrementRewardPool(ethers.ZeroAddress, 0, 0),
+      rewardsManager.incrementRewardPool(ethers.ZeroAddress, 0, 0),
     ).to.be.revertedWithCustomError(
       rewardsManager,
       'CannotIncrementRewardPoolWithZeroNodeAddress',
@@ -105,7 +110,7 @@ describe('Rewards Manager', () => {
 
   it('cannot increment reward pool with invalid amount', async () => {
     await expect(
-      ticketing.testerIncrementRewardPool(await deployer.getAddress(), 0, 0),
+      rewardsManager.incrementRewardPool(await deployer.getAddress(), 0, 0),
     ).to.be.revertedWithCustomError(
       rewardsManager,
       'CannotIncrementRewardPoolWithZeroAmount',
@@ -113,32 +118,24 @@ describe('Rewards Manager', () => {
   });
 
   it('can increment reward pool with zero node commission', async () => {
-    const { newRewardsManager, newTicketing } = await initialiseContracts();
-    await checkInitialRewardPoolState(newRewardsManager);
+    await registries.setDefaultPayoutPercentage(0);
 
-    await newTicketing.testerIncrementRewardPool(
-      await node1.getAddress(),
-      0,
-      100,
-    );
+    await rewardsManager.incrementRewardPool(await node1.getAddress(), 0, 100);
 
-    const rewardPool = await newRewardsManager.getRewardPool(
+    const rewardPool = await rewardsManager.getRewardPool(
       await node1.getAddress(),
       0,
     );
-    const unclaimedCommission =
-      await newRewardsManager.getUnclaimedNodeCommission(
-        await node1.getAddress(),
-      );
+    const unclaimedCommission = await rewardsManager.getUnclaimedNodeCommission(
+      await node1.getAddress(),
+    );
 
     assert.equal(Number(rewardPool), 0);
     assert.equal(Number(unclaimedCommission), 100);
   });
 
   it('can increment reward pool', async () => {
-    await checkInitialRewardPoolState(rewardsManager);
-
-    await ticketing.testerIncrementRewardPool(await node1.getAddress(), 0, 100);
+    await rewardsManager.incrementRewardPool(await node1.getAddress(), 0, 100);
 
     const rewardPool = await rewardsManager.getRewardPool(
       await node1.getAddress(),
@@ -149,10 +146,8 @@ describe('Rewards Manager', () => {
   });
 
   it('can increment reward pool multiple nodes', async () => {
-    await checkInitialRewardPoolState(rewardsManager);
-
-    await ticketing.testerIncrementRewardPool(await node1.getAddress(), 0, 100);
-    await ticketing.testerIncrementRewardPool(await node2.getAddress(), 0, 200);
+    await rewardsManager.incrementRewardPool(await node1.getAddress(), 0, 100);
+    await rewardsManager.incrementRewardPool(await node2.getAddress(), 0, 200);
 
     const rewardPool = await rewardsManager.getRewardPool(
       await node1.getAddress(),
@@ -168,26 +163,16 @@ describe('Rewards Manager', () => {
   });
 
   it('can increment reward pool over multiple cycles', async () => {
-    await checkInitialRewardPoolState(rewardsManager);
+    await rewardsManager.incrementRewardPool(await node1.getAddress(), 0, 100);
+    await rewardsManager.incrementRewardPool(await node1.getAddress(), 1, 200);
+    await rewardsManager.incrementRewardPool(await node2.getAddress(), 0, 300);
+    await rewardsManager.incrementRewardPool(await node2.getAddress(), 1, 500);
 
-    await ticketing.testerIncrementRewardPool(await node1.getAddress(), 0, 100);
-    await ticketing.testerIncrementRewardPool(await node1.getAddress(), 1, 200);
-    await ticketing.testerIncrementRewardPool(await node2.getAddress(), 0, 300);
-    await ticketing.testerIncrementRewardPool(await node2.getAddress(), 1, 500);
-
-    // const rewardPoolNode1Cycle1 = await rewardsManager.getRewardPool(
-    //   await node1.getAddress(),
-    //   0,
-    // );
     const rewardPoolNode1 = await rewardsManager.getRewardPools(
       await node1.getAddress(),
       [0, 1],
     );
 
-    // const rewardPoolNode2Cycle1 = await rewardsManager.getRewardPool(
-    //   await node2.getAddress(),
-    //   0,
-    // );
     const rewardPoolNode2 = await rewardsManager.getRewardPools(
       await node2.getAddress(),
       [0, 1],
@@ -201,52 +186,30 @@ describe('Rewards Manager', () => {
   });
 
   it('can increment reward pool with different node commissions', async () => {
-    const { newRewardsManager, newRegistries, newTicketing } =
-      await initialiseContracts();
-    await checkInitialRewardPoolState(newRewardsManager);
+    await registries.setDefaultPayoutPercentage(0);
 
-    await newTicketing.testerIncrementRewardPool(
-      await node1.getAddress(),
-      0,
-      100,
-    );
-    await newTicketing.testerIncrementRewardPool(
-      await node2.getAddress(),
-      0,
-      300,
-    );
+    await rewardsManager.incrementRewardPool(await node1.getAddress(), 0, 100);
+    await rewardsManager.incrementRewardPool(await node2.getAddress(), 0, 300);
 
-    await newRegistries.setDefaultPayoutPercentage(10000);
+    await registries.setDefaultPayoutPercentage(10000);
 
-    await newTicketing.testerIncrementRewardPool(
-      await node1.getAddress(),
-      1,
-      200,
-    );
-    await newTicketing.testerIncrementRewardPool(
-      await node2.getAddress(),
-      1,
-      500,
-    );
+    await rewardsManager.incrementRewardPool(await node1.getAddress(), 1, 200);
+    await rewardsManager.incrementRewardPool(await node2.getAddress(), 1, 500);
 
-    const rewardPoolNode1 = await newRewardsManager.getRewardPools(
+    const rewardPoolNode1 = await rewardsManager.getRewardPools(
       await node1.getAddress(),
       [0, 1],
     );
 
-    const rewardPoolNode2 = await newRewardsManager.getRewardPools(
+    const rewardPoolNode2 = await rewardsManager.getRewardPools(
       await node2.getAddress(),
       [0, 1],
     );
 
     const unclaimedNode1Commission =
-      await newRewardsManager.getUnclaimedNodeCommission(
-        await node1.getAddress(),
-      );
+      await rewardsManager.getUnclaimedNodeCommission(await node1.getAddress());
     const unclaimedNode2Commission =
-      await newRewardsManager.getUnclaimedNodeCommission(
-        await node2.getAddress(),
-      );
+      await rewardsManager.getUnclaimedNodeCommission(await node2.getAddress());
 
     assert.equal(Number(rewardPoolNode1[0]), 0);
     assert.equal(Number(rewardPoolNode1[1]), 20);
@@ -306,42 +269,4 @@ describe('Rewards Manager', () => {
       'Expected rewards manager to not support incorrect interface',
     );
   });
-
-  async function checkInitialRewardPoolState(_rewardsManager: RewardsManager) {
-    const rewardPool = await _rewardsManager.getRewardPool(
-      await node1.getAddress(),
-      0,
-    );
-
-    assert.equal(
-      Number(rewardPool),
-      0,
-      'expected initial reward pool amount to be zero',
-    );
-  }
-
-  async function initialiseContracts(): Promise<{
-    newRewardsManager: RewardsManager;
-    newRegistries: Registries;
-    newTicketing: Ticketing;
-  }> {
-    const rewardsManagerFactory = await ethers.getContractFactory(
-      'RewardsManager',
-    );
-    const registriesFactory = await ethers.getContractFactory('Registries');
-    const ticketingFactory = await ethers.getContractFactory('Ticketing');
-
-    const newRewardsManager = await rewardsManagerFactory.deploy();
-    const newRegistries = await registriesFactory.deploy();
-    const newTicketing = await ticketingFactory.deploy();
-
-    await newRegistries.initialize(0);
-    await newTicketing.initialize(await newRewardsManager.getAddress());
-    await newRewardsManager.initialize(
-      newRegistries,
-      await newTicketing.getAddress(),
-    );
-
-    return { newRewardsManager, newRegistries, newTicketing };
-  }
 });

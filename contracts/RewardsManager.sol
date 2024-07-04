@@ -3,6 +3,7 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "./libraries/SyloUtils.sol";
 
 import "./IRewardsManager.sol";
 import "./Registries.sol";
@@ -41,18 +42,18 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      */
     mapping(address => uint256) unclaimedNodeCommission;
 
-    error CannotInitializeEmptyRegistriesAddress();
-    error CannotInitializeEmptyTicketingAddress();
+    error RegistriesAddressCannotBeNil();
+    error TicketingAddressCannotBeNil();
     error CannotIncrementRewardPoolWithZeroNodeAddress();
     error CannotIncrementRewardPoolWithZeroAmount();
     error CannotInitializeWithNonTicketing();
 
     function initialize(Registries _registries, Ticketing _ticketing) external initializer {
         if (address(_registries) == address(0)) {
-            revert CannotInitializeEmptyRegistriesAddress();
+            revert RegistriesAddressCannotBeNil();
         }
         if (address(_ticketing) == address(0)) {
-            revert CannotInitializeEmptyTicketingAddress();
+            revert TicketingAddressCannotBeNil();
         }
         if (!ERC165(address(_ticketing)).supportsInterface(type(ITicketing).interfaceId)) {
             revert CannotInitializeWithNonTicketing();
@@ -62,6 +63,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         ticketing = _ticketing;
 
         _grantRole(onlyTicketing, address(_ticketing));
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     /**
@@ -93,14 +95,10 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
             revert CannotIncrementRewardPoolWithZeroAmount();
         }
 
-        if (registries.defaultPayoutPercentage() != 0) {
-            uint256 stakersReward = percOf(amount, registries.defaultPayoutPercentage());
-            uint256 nodesCommission = amount - stakersReward;
-            unclaimedNodeCommission[node] += nodesCommission;
-            rewardPools[node][cycle] += stakersReward;
-        } else {
-            unclaimedNodeCommission[node] += amount;
-        }
+        uint256 stakersReward = SyloUtils.percOf(amount, registries.defaultPayoutPercentage());
+        uint256 nodesCommission = amount - stakersReward;
+        unclaimedNodeCommission[node] += nodesCommission;
+        rewardPools[node][cycle] += stakersReward;
     }
 
     /**
@@ -113,7 +111,8 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     }
 
     /**
-     * @notice Gets the reward pool for a node from a specific cycle
+     * @notice Sums the nodes reward pools over the given cycles.
+     * Returning the stakers reward over multiple cycles.
      * @param node Address of nodes
      * @param cycles Associated reward pools cycles
      */
@@ -143,15 +142,5 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      */
     function claim(address node, uint256 cycle) external {
         revert("not implemented");
-    }
-
-    /**
-     * @notice Multiply a value by a given percentage. Converts the provided
-     * uint128 value to uint256 to avoid any reverts on overflow.
-     * @param value The value to multiply.
-     * @param percentage The percentage, as a ratio of 100000.
-     */
-    function percOf(uint256 value, uint32 percentage) internal pure returns (uint256) {
-        return (uint256(value) * percentage) / 100000;
     }
 }
