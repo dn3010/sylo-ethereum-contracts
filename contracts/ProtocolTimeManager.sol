@@ -412,19 +412,10 @@ contract ProtocolTimeManager is
     /**
      * @notice Get the cycle and period durations
      */
-    function getTime() external view returns (uint256, uint256, Cycle memory) {
+    function getTime() external view returns (uint256, uint256, Cycle memory, uint256) {
         Cycle memory cycle = _getCurrentCycle();
         uint256 period = _getCurrentPeriod();
-        return (cycle.iteration, period, cycle);
-    }
-
-    function isFinalStakingPeriod() external view returns (bool) {
-        Cycle memory cycle = _getCurrentCycle();
         uint256 periodDuration = _getPeriodDuration();
-        uint256 cycleFinish = cycle.start + cycle.duration;
-        if ((block.timestamp + periodDuration) >= cycleFinish) {
-            return true;
-        }
-        return false;
+        return (cycle.iteration, period, cycle, periodDuration);
     }
 }

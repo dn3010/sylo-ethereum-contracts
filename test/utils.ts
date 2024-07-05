@@ -1,6 +1,8 @@
 import { ethers } from 'hardhat';
 import { SyloContracts } from '../common/contracts';
 import { Address } from 'hardhat-deploy/types';
+import { ProtocolTimeManager } from '../typechain-types';
+import { increaseTo } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
 export type DeploymentOptions = {
   syloStakingManager?: {
@@ -137,4 +139,40 @@ export function getInterfaceId(abi: string[]): string {
   }, '0x00000000');
 
   return interfaceId;
+}
+
+export type timeManagerUtilType = {
+  startProtocol: () => Promise<{
+    start: number;
+    setTimeSinceStart: (time: number) => Promise<void>;
+  }>;
+  setProtocolStartIn: (time: number) => Promise<number>;
+};
+
+export function getTimeManagerUtil(
+  protocolTimeManager: ProtocolTimeManager,
+): timeManagerUtilType {
+  const setProtocolStartIn = async (time: number): Promise<number> => {
+    const block = await ethers.provider.getBlock('latest').then(b => {
+      if (!b) throw new Error('block undefined');
+      return b;
+    });
+
+    await protocolTimeManager.setProtocolStart(block.timestamp + time);
+    return protocolTimeManager.getStart().then(Number);
+  };
+
+  const startProtocol = async (): Promise<{
+    start: number;
+    setTimeSinceStart: (time: number) => Promise<void>;
+  }> => {
+    const start = await setProtocolStartIn(100);
+    await increaseTo(start);
+    const setTimeSinceStart = async (time: number): Promise<void> => {
+      return increaseTo(start + time);
+    };
+    return { start, setTimeSinceStart };
+  };
+
+  return { startProtocol, setProtocolStartIn };
 }

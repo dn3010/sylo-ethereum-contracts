@@ -23,7 +23,7 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
     error CannotInitialiseWithZeroStakingOrchestratorAddress();
     error CannotInitialiseWithZeroProtocolTimeManagerAddress();
     error CannotJoinDirectoryWithZeroStake();
-    error StakeeAlreadyJoinedDirectory();
+    error NodeAlreadyJoinedDirectory();
 
     function initialize(
         StakingOrchestrator _stakingOrchestrator,
@@ -51,8 +51,12 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function scan(uint128 point) external view returns (address) {
-        uint256 currentStakingPeriod = protocolTimeManager.getCurrentPeriod();
-        IProtocolTimeManager.Cycle memory cycle = protocolTimeManager.getCurrentCycle();
+        (
+            ,
+            uint256 currentStakingPeriod,
+            IProtocolTimeManager.Cycle memory cycle,
+
+        ) = protocolTimeManager.getTime();
         return _scan(point, cycle.iteration, currentStakingPeriod);
     }
 
@@ -111,9 +115,12 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function joinNextDirectory() external {
-        IProtocolTimeManager.Cycle memory currentRewardCycle = protocolTimeManager
-            .getCurrentCycle();
-        uint256 currentStakingPeriod = protocolTimeManager.getCurrentPeriod();
+        (
+            ,
+            uint256 currentStakingPeriod,
+            IProtocolTimeManager.Cycle memory currentRewardCycle,
+            uint256 periodDuration
+        ) = protocolTimeManager.getTime();
 
         uint256 nodeStake = stakingOrchestrator.getNodeCurrentStake(msg.sender);
         if (nodeStake == 0) {
@@ -125,12 +132,15 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
                 msg.sender
             ] > 0
         ) {
-            revert StakeeAlreadyJoinedDirectory();
+            revert NodeAlreadyJoinedDirectory();
         }
 
         uint256 stakingPeriod = 0;
         uint256 rewardCycle;
-        if (!protocolTimeManager.isFinalStakingPeriod()) {
+        if (
+            !((block.timestamp + periodDuration) >=
+                (currentRewardCycle.start + currentRewardCycle.duration))
+        ) {
             stakingPeriod = currentStakingPeriod + 1;
             rewardCycle = currentRewardCycle.iteration;
         } else {

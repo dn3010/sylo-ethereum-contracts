@@ -1,6 +1,6 @@
 import { ethers } from 'hardhat';
 import { Signer } from 'ethers';
-import { deployContracts } from './utils';
+import { deployContracts, timeManagerUtilType } from './utils';
 import { expect, assert } from 'chai';
 import { SyloContracts } from '../common/contracts';
 import {
@@ -8,8 +8,7 @@ import {
   StakingOrchestrator,
   ProtocolTimeManager,
 } from '../typechain-types';
-import { getInterfaceId } from './utils';
-import { increaseTo } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
+import { getInterfaceId, getTimeManagerUtil } from './utils';
 
 describe('Directory', () => {
   let contracts: SyloContracts;
@@ -18,14 +17,22 @@ describe('Directory', () => {
   let protocolTimeManager: ProtocolTimeManager;
   let accounts: Signer[];
   let nodeOne: Signer;
+  let nodeTwo: Signer;
+  let nodeThree: Signer;
+
+  let timeManagerUtil: timeManagerUtilType;
 
   beforeEach(async () => {
     contracts = await deployContracts();
     accounts = await ethers.getSigners();
     nodeOne = accounts[1];
+    nodeTwo = accounts[2];
+    nodeThree = accounts[3];
     directory = contracts.directory;
     stakingOrchestator = contracts.stakingOrchestrator;
     protocolTimeManager = contracts.protocolTimeManager;
+
+    timeManagerUtil = getTimeManagerUtil(protocolTimeManager);
   });
 
   it('cannot initialize directory more than once', async () => {
@@ -68,7 +75,7 @@ describe('Directory', () => {
   });
 
   it('cannot join directory without stake', async () => {
-    await startProtocol();
+    await timeManagerUtil.startProtocol();
     await expect(directory.joinNextDirectory()).to.be.revertedWithCustomError(
       directory,
       'CannotJoinDirectoryWithZeroStake',
@@ -76,104 +83,201 @@ describe('Directory', () => {
   });
 
   it('cannot join same directory twice', async () => {
-    await startProtocol();
+    await timeManagerUtil.startProtocol();
     await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
     await directory.connect(nodeOne).joinNextDirectory();
     await expect(
       directory.connect(nodeOne).joinNextDirectory(),
-    ).to.be.revertedWithCustomError(directory, 'StakeeAlreadyJoinedDirectory');
+    ).to.be.revertedWithCustomError(directory, 'NodeAlreadyJoinedDirectory');
   });
 
   it('should be able to scan after joining directory', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
     await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
     await directory.connect(nodeOne).joinNextDirectory();
     await setTimeSinceStart(110);
-    const address = await directory.scan(0);
-    assert.equal(address, await nodeOne.getAddress());
+
+    await testScan(BigInt(0), await nodeOne.getAddress());
   });
 
   it('should be able to scan with period id after joining directory', async () => {
-    await startProtocol();
+    await timeManagerUtil.startProtocol();
     await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
     await directory.connect(nodeOne).joinNextDirectory();
-    const address = await directory.scanWithTime(0, 1, 1);
-    assert.equal(address, await nodeOne.getAddress());
+
+    await testScanWithTime(
+      BigInt(0),
+      BigInt(1),
+      BigInt(1),
+      await nodeOne.getAddress(),
+    );
   });
 
   it('should be able to scan empty directory', async () => {
-    await startProtocol();
-    const address = await directory.scan(0);
-    assert.equal(address.toString(), ethers.ZeroAddress);
+    await timeManagerUtil.startProtocol();
+    await testScan(BigInt(0), ethers.ZeroAddress);
   });
 
   it('should be able to scan for different staking periods', async () => {
-    let address: string;
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
     await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
     await directory.connect(nodeOne).joinNextDirectory();
 
     await setTimeSinceStart(150);
 
-    address = await directory.scan(0);
-    assert.equal(address, await nodeOne.getAddress());
+    await testScan(BigInt(0), await nodeOne.getAddress());
 
     await setTimeSinceStart(500);
 
-    address = await directory.scan(0);
-    assert.equal(address, ethers.ZeroAddress);
+    await testScan(BigInt(0), ethers.ZeroAddress);
   });
 
-  it('node joins next reward cycle', async () => {
-    let address: string;
-    const { setTimeSinceStart } = await startProtocol();
+  it('node joins next cycle at the final period', async () => {
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
     await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
+
+    // Cycle duration -> 1000
+    // Period duration -> 100
+
+    // Join Cycle 1, Period 2
     await directory.connect(nodeOne).joinNextDirectory();
 
     await setTimeSinceStart(150);
 
-    address = await directory.scan(0);
-    assert.equal(address, await nodeOne.getAddress());
+    await testScan(BigInt(0), await nodeOne.getAddress());
 
     await setTimeSinceStart(850);
 
+    // Join Cycle 1, Period 9
     await directory.connect(nodeOne).joinNextDirectory();
 
     await setTimeSinceStart(950);
 
-    address = await directory.scan(0);
-    assert.equal(address, await nodeOne.getAddress());
+    // Test that node has joined final staking period
+    await testScan(BigInt(0), await nodeOne.getAddress());
 
     await setTimeSinceStart(1050);
 
-    address = await directory.scan(0);
-    assert.equal(address, ethers.ZeroAddress);
+    // Test that node did not join for Period 0
+    // of next Cycle, Cycle 2
+    await testScan(BigInt(0), ethers.ZeroAddress);
 
     await setTimeSinceStart(1950);
+
+    // Join Cycle 3, Period 0
     await directory.connect(nodeOne).joinNextDirectory();
 
     await setTimeSinceStart(2050);
 
-    address = await directory.scan(0);
-    assert.equal(address, await nodeOne.getAddress());
+    // Test that node joined for Period 0
+    // of next Cycle, Cycle 3
+    await testScan(BigInt(0), await nodeOne.getAddress());
   });
 
-  it('should be able to scan for same staking period', async () => {
-    let address: string;
-    const { setTimeSinceStart } = await startProtocol();
+  it('should be able to scan for previous periods', async () => {
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
     await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
+    await stakingOrchestator.syloStakeAdded(nodeTwo, ethers.ZeroAddress, 1000);
+    await stakingOrchestator.syloStakeAdded(
+      nodeThree,
+      ethers.ZeroAddress,
+      1000,
+    );
+
+    const threePoints = (2n ** 128n - 1n) / 3n;
+    const twoPoints = (2n ** 128n - 1n) / 2n;
+
+    const nodeTwoPointPeriodOne = threePoints + 1n;
+    const nodeThreePointPeriodOne = threePoints * 2n + 1n;
+
+    const nodeTwoPointPeriodTwo = twoPoints + 1n;
+
+    // All three nodes join the next directory so
+    // should be able to be scanned to
     await directory.connect(nodeOne).joinNextDirectory();
-    address = await directory.scanWithTime(0, 1, 1);
-    assert.equal(address, await nodeOne.getAddress());
+    await directory.connect(nodeTwo).joinNextDirectory();
+    await directory.connect(nodeThree).joinNextDirectory();
 
-    await setTimeSinceStart(500);
+    await testScanWithTime(
+      BigInt(0),
+      BigInt(1),
+      BigInt(1),
+      await nodeOne.getAddress(),
+    );
 
-    address = await directory.scanWithTime(0, 1, 1);
-    assert.equal(address, await nodeOne.getAddress());
+    await testScanWithTime(
+      nodeTwoPointPeriodOne,
+      BigInt(1),
+      BigInt(1),
+      await nodeTwo.getAddress(),
+    );
+
+    await testScanWithTime(
+      nodeThreePointPeriodOne,
+      BigInt(1),
+      BigInt(1),
+      await nodeThree.getAddress(),
+    );
+
+    await setTimeSinceStart(150);
+
+    // Nodes one and two join the next directory, however
+    // node three should still be scanned to from the prior
+    // period
+    await directory.connect(nodeOne).joinNextDirectory();
+    await directory.connect(nodeTwo).joinNextDirectory();
+
+    await testScanWithTime(
+      BigInt(0),
+      BigInt(1),
+      BigInt(2),
+      await nodeOne.getAddress(),
+    );
+
+    await testScanWithTime(
+      nodeTwoPointPeriodTwo,
+      BigInt(1),
+      BigInt(2),
+      await nodeTwo.getAddress(),
+    );
+
+    await testScanWithTime(
+      nodeThreePointPeriodOne,
+      BigInt(1),
+      BigInt(1),
+      await nodeThree.getAddress(),
+    );
+
+    await setTimeSinceStart(250);
+
+    // Only node one joins the next directory and
+    // so is the only node scanned to for that period
+    await directory.connect(nodeOne).joinNextDirectory();
+
+    await testScanWithTime(
+      BigInt(0),
+      BigInt(1),
+      BigInt(3),
+      await nodeOne.getAddress(),
+    );
+
+    await testScanWithTime(
+      nodeTwoPointPeriodTwo,
+      BigInt(1),
+      BigInt(3),
+      await nodeOne.getAddress(),
+    );
+
+    await testScanWithTime(
+      nodeTwoPointPeriodTwo,
+      BigInt(1),
+      BigInt(2),
+      await nodeTwo.getAddress(),
+    );
   });
 
   it('should correctly scan accounts based on their stake proportions', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
     for (let i = 0; i < 5; i++) {
       await stakingOrchestator.syloStakeAdded(
         await accounts[i].getAddress(),
@@ -196,19 +300,13 @@ describe('Directory', () => {
 
     for (let i = 0; i < 5; i++) {
       // check scan
-      const address = await directory.scan(points[i]);
-      assert.equal(
-        address,
-        await accounts[i].getAddress(),
-        'Expected scan to return correct result',
-      );
+      await testScan(points[i], await accounts[i].getAddress());
 
-      // check scan with staking period
-      const addressWithEpochId = await directory.scanWithTime(points[i], 1, 1);
-      assert.equal(
-        addressWithEpochId,
+      await testScanWithTime(
+        points[i],
+        BigInt(1),
+        BigInt(1),
         await accounts[i].getAddress(),
-        'Expected scan with staking period to return correct result',
       );
     }
 
@@ -216,43 +314,19 @@ describe('Directory', () => {
 
     for (let i = 0; i < 5; i++) {
       // check scan
-      const address = await directory.scan(points[i]);
-      assert.equal(
-        address,
-        ethers.ZeroAddress,
-        'Expected scan to return zero address',
-      );
+      await testScan(points[i], ethers.ZeroAddress);
 
-      // check scan with staking period
-      const addressWithEpochId = await directory.scanWithTime(points[i], 2, 1);
-      assert.equal(
-        addressWithEpochId,
+      await testScanWithTime(
+        points[i],
+        BigInt(2),
+        BigInt(1),
         ethers.ZeroAddress,
-        'Expected scan with staking period to return zero address',
       );
     }
   });
 
   it('should correctly scan with different staking period ids', async () => {
-    const { setTimeSinceStart } = await startProtocol();
-
-    async function checkScanWithStakingPeriod(
-      nodeAddress: string,
-      pointValue: string,
-      requestRewardCycle: number,
-      requestStakingPeriod: number,
-    ) {
-      const address = await directory.scanWithTime(
-        pointValue,
-        requestRewardCycle,
-        requestStakingPeriod,
-      );
-      assert.equal(
-        address.toString(),
-        nodeAddress,
-        `Expected scan with staking period id to return correct address ${nodeAddress} for epoch ${requestStakingPeriod}`,
-      );
-    }
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     // process staking period 1
     const amountPeriodOne = [250, 350, 400];
@@ -280,29 +354,29 @@ describe('Directory', () => {
 
     // check point of node 0, staking period 1
     let point = (2n ** 128n - 1n) / 8n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(1),
       await accounts[0].getAddress(),
-      point.toString(),
-      1,
-      1,
     );
 
     // check point of node 1, staking period 1
     point = (2n ** 128n - 1n) / 2n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(1),
       await accounts[1].getAddress(),
-      point.toString(),
-      1,
-      1,
     );
 
     // check point of node 2, staking period 1
     point = 2n ** 128n - 1n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(1),
       await accounts[2].getAddress(),
-      point.toString(),
-      1,
-      1,
     );
 
     // In staking period 2, the directory tree will be
@@ -312,28 +386,33 @@ describe('Directory', () => {
 
     // check point of node 1, staking period 2
     point = (2n ** 128n - 1n) / 4n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(2),
       await accounts[1].getAddress(),
-      point.toString(),
-      1,
-      2,
     );
 
     // check point of node 3, staking period 2
     point = ((2n ** 128n - 1n) / 4n) * 3n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(2),
       await accounts[3].getAddress(),
-      point.toString(),
-      1,
-      2,
     );
 
     // check staking period 4 - empty directory
-    await checkScanWithStakingPeriod(ethers.ZeroAddress, '10000000', 1, 4);
+    await testScanWithTime(
+      BigInt(10000000),
+      BigInt(1),
+      BigInt(4),
+      ethers.ZeroAddress,
+    );
   });
 
   it('should correctly scan accounts based on their stake proportions over multiple reward cycles', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
     for (let i = 0; i < 5; i++) {
       await stakingOrchestator.syloStakeAdded(
         await accounts[i].getAddress(),
@@ -356,23 +435,14 @@ describe('Directory', () => {
 
     for (let i = 0; i < 5; i++) {
       // check scan
-      const address = await directory.scan(points[i]);
-      assert.equal(
-        address,
-        await accounts[i].getAddress(),
-        'Expected scan to return correct result',
-      );
+      await testScan(points[i], await accounts[i].getAddress());
 
       // check scan with staking period
-      const addressWithStakingPeriod = await directory.scanWithTime(
+      await testScanWithTime(
         points[i],
-        1,
-        1,
-      );
-      assert.equal(
-        addressWithStakingPeriod,
+        BigInt(1),
+        BigInt(1),
         await accounts[i].getAddress(),
-        'Expected scan with staking period to return correct result',
       );
     }
 
@@ -380,47 +450,20 @@ describe('Directory', () => {
 
     for (let i = 0; i < 5; i++) {
       // check scan
-      const address = await directory.scan(points[i]);
-      assert.equal(
-        address,
-        ethers.ZeroAddress,
-        'Expected scan to return zero address',
-      );
+      await testScan(points[i], ethers.ZeroAddress);
 
       // check scan with staking period
-      const addressWithStakingPeriod = await directory.scanWithTime(
+      await testScanWithTime(
         points[i],
-        2,
-        1,
-      );
-      assert.equal(
-        addressWithStakingPeriod,
+        BigInt(2),
+        BigInt(1),
         ethers.ZeroAddress,
-        'Expected scan with staking period to return zero address',
       );
     }
   });
 
   it('should correctly scan with different staking period ids over multiple reward cycles', async () => {
-    const { setTimeSinceStart } = await startProtocol();
-
-    async function checkScanWithStakingPeriod(
-      nodeAddress: string,
-      pointValue: string,
-      requestRewardCycle: number,
-      requestStakingPeriod: number,
-    ) {
-      const address = await directory.scanWithTime(
-        pointValue,
-        requestRewardCycle,
-        requestStakingPeriod,
-      );
-      assert.equal(
-        address.toString(),
-        nodeAddress,
-        `Expected scan with staking period id to return correct address ${nodeAddress} for epoch ${requestStakingPeriod}`,
-      );
-    }
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     /*
     Reward Cycle 1
@@ -454,29 +497,29 @@ describe('Directory', () => {
     // check point of node 0, staking period 1
     let point: bigint;
     point = (2n ** 128n - 1n) / 8n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(1),
       await accounts[0].getAddress(),
-      point.toString(),
-      1,
-      1,
     );
 
     // check point of node 1, staking period 1
     point = (2n ** 128n - 1n) / 2n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(1),
       await accounts[1].getAddress(),
-      point.toString(),
-      1,
-      1,
     );
 
     // check point of node 2, staking period 1
     point = 2n ** 128n - 1n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(1),
       await accounts[2].getAddress(),
-      point.toString(),
-      1,
-      1,
     );
 
     // In staking period 2, the directory tree will be
@@ -486,20 +529,20 @@ describe('Directory', () => {
 
     // check point of node 1, staking period 2
     point = (2n ** 128n - 1n) / 4n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(2),
       await accounts[1].getAddress(),
-      point.toString(),
-      1,
-      2,
     );
 
     // check point of node 3, staking period 2
     point = ((2n ** 128n - 1n) / 4n) * 3n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(1),
+      BigInt(2),
       await accounts[3].getAddress(),
-      point.toString(),
-      1,
-      2,
     );
 
     /*
@@ -534,29 +577,29 @@ describe('Directory', () => {
 
     // check point of node 0, staking period 0
     point = (2n ** 128n - 1n) / 8n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(2),
+      BigInt(0),
       await accounts[0].getAddress(),
-      point.toString(),
-      2,
-      0,
     );
 
     // check point of node 1, staking period 0
     point = (2n ** 128n - 1n) / 2n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(2),
+      BigInt(0),
       await accounts[1].getAddress(),
-      point.toString(),
-      2,
-      0,
     );
 
     // check point of node 2, staking period 0
     point = 2n ** 128n - 1n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(2),
+      BigInt(0),
       await accounts[2].getAddress(),
-      point.toString(),
-      2,
-      0,
     );
 
     // In staking period 1, the directory tree will be
@@ -566,24 +609,29 @@ describe('Directory', () => {
 
     // check point of node 1, staking period 1
     point = (2n ** 128n - 1n) / 4n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(2),
+      BigInt(1),
       await accounts[1].getAddress(),
-      point.toString(),
-      2,
-      1,
     );
 
     // check point of node 3, staking period 1
     point = ((2n ** 128n - 1n) / 4n) * 3n;
-    await checkScanWithStakingPeriod(
+    await testScanWithTime(
+      point,
+      BigInt(2),
+      BigInt(1),
       await accounts[3].getAddress(),
-      point.toString(),
-      2,
-      1,
     );
 
     // check staking period 4 - empty directory
-    await checkScanWithStakingPeriod(ethers.ZeroAddress, '10000000', 1, 4);
+    await testScanWithTime(
+      BigInt(10000000),
+      BigInt(1),
+      BigInt(4),
+      ethers.ZeroAddress,
+    );
   });
 
   it('directory supports correct interfaces', async () => {
@@ -618,23 +666,18 @@ describe('Directory', () => {
     );
   });
 
-  async function setProtocolStartIn(time: number): Promise<number> {
-    const block = await ethers.provider.getBlock('latest').then(b => {
-      if (!b) throw new Error('block undefined');
-      return b;
-    });
+  const testScan = async function (point: bigint, expectedAddress: string) {
+    expect(await directory.scan(point)).to.equal(expectedAddress);
+  };
 
-    await protocolTimeManager.setProtocolStart(block.timestamp + time);
-
-    return protocolTimeManager.getStart().then(Number);
-  }
-
-  async function startProtocol() {
-    const start = await setProtocolStartIn(100);
-    await increaseTo(start);
-    const setTimeSinceStart = async (time: number) => {
-      return increaseTo(start + time);
-    };
-    return { start, setTimeSinceStart };
-  }
+  const testScanWithTime = async function (
+    point: bigint,
+    cycle: bigint,
+    period: bigint,
+    expectedAddress: string,
+  ) {
+    expect(await directory.scanWithTime(point, cycle, period)).to.equal(
+      expectedAddress,
+    );
+  };
 });

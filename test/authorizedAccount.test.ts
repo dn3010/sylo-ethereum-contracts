@@ -675,15 +675,6 @@ describe('Authorized Accounts', () => {
     );
     let authBlock = await currentBlock();
 
-    // U = 0 && A < B => true
-    // validate = await authAccountsConnectMain.validatePermission(
-    //   mainAccountAddress,
-    //   delegatedAccount1,
-    //   Permission.PersonalSign,
-    //   1000,
-    // );
-    // assert.equal(validate, true);
-
     // A < B < U => true
     await mine(5);
     await authAccountsConnectMain.unauthorizeAccount(delegatedAccount1);
