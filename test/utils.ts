@@ -1,6 +1,8 @@
 import { ethers } from 'hardhat';
 import { SyloContracts } from '../common/contracts';
 import { Address } from 'hardhat-deploy/types';
+import { ProtocolTimeManager } from '../typechain-types';
+import { increaseTo } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
 export type DeploymentOptions = {
   syloStakingManager?: {
@@ -44,6 +46,10 @@ export async function deployContracts(
     'RewardsManager',
   );
   const ticketingFactory = await ethers.getContractFactory('Ticketing');
+  const stakingOrchestratorFactory = await ethers.getContractFactory(
+    'StakingOrchestrator',
+  );
+  const directoryFactory = await ethers.getContractFactory('Directory');
 
   // Deploy
   const syloToken = await syloTokenFactory.deploy();
@@ -56,6 +62,8 @@ export async function deployContracts(
   const authorizedAccounts = await authorizedAccountsFactory.deploy();
   const rewardsManager = await rewardsManagerFactory.deploy();
   const ticketing = await ticketingFactory.deploy();
+  const stakingOrchestrator = await stakingOrchestratorFactory.deploy();
+  const directory = await directoryFactory.deploy();
 
   // Options
   const syloStakingManagerOpts = {
@@ -88,6 +96,10 @@ export async function deployContracts(
   await authorizedAccounts.initialize();
   await ticketing.initialize(await rewardsManager.getAddress());
   await rewardsManager.initialize(await registries.getAddress(), ticketing);
+  await directory.initialize(
+    await stakingOrchestrator.getAddress(),
+    await protocolTimeManager.getAddress(),
+  );
   await protocolTimeManager.initialize(
     protocolTimeManagerOpts.cycleDuration,
     protocolTimeManagerOpts.periodDuration,
@@ -104,6 +116,8 @@ export async function deployContracts(
     authorizedAccounts,
     rewardsManager,
     ticketing,
+    stakingOrchestrator,
+    directory,
   };
 }
 
@@ -125,4 +139,40 @@ export function getInterfaceId(abi: string[]): string {
   }, '0x00000000');
 
   return interfaceId;
+}
+
+export type timeManagerUtilType = {
+  startProtocol: () => Promise<{
+    start: number;
+    setTimeSinceStart: (time: number) => Promise<void>;
+  }>;
+  setProtocolStartIn: (time: number) => Promise<number>;
+};
+
+export function getTimeManagerUtil(
+  protocolTimeManager: ProtocolTimeManager,
+): timeManagerUtilType {
+  const setProtocolStartIn = async (time: number): Promise<number> => {
+    const block = await ethers.provider.getBlock('latest').then(b => {
+      if (!b) throw new Error('block undefined');
+      return b;
+    });
+
+    await protocolTimeManager.setProtocolStart(block.timestamp + time);
+    return protocolTimeManager.getStart().then(Number);
+  };
+
+  const startProtocol = async (): Promise<{
+    start: number;
+    setTimeSinceStart: (time: number) => Promise<void>;
+  }> => {
+    const start = await setProtocolStartIn(100);
+    await increaseTo(start);
+    const setTimeSinceStart = async (time: number): Promise<void> => {
+      return increaseTo(start + time);
+    };
+    return { start, setTimeSinceStart };
+  };
+
+  return { startProtocol, setProtocolStartIn };
 }

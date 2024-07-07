@@ -14,6 +14,8 @@ export const DeployedContractNames = {
   authorizedAccounts: 'AuthorizedAccounts',
   rewardsManager: 'RewardsManager',
   ticketing: 'Ticketing',
+  stakingOrchestrator: 'StakingOrchestrator',
+  direcrory: 'Directory',
 };
 
 export const ContractNames = {
@@ -32,6 +34,8 @@ export type SyloContracts = {
   authorizedAccounts: factories.contracts.AuthorizedAccounts;
   rewardsManager: factories.contracts.RewardsManager;
   ticketing: factories.contracts.Ticketing;
+  stakingOrchestrator: factories.contracts.staking.StakingOrchestrator;
+  directory: factories.contracts.Directory;
 };
 
 export type ContractAddresses = {
@@ -45,6 +49,8 @@ export type ContractAddresses = {
   authorizedAccounts: string;
   rewardsManager: string;
   ticketing: string;
+  stakingOrchestator: string;
+  directory: string;
 };
 
 export function connectContracts(
@@ -101,6 +107,16 @@ export function connectContracts(
     provider,
   );
 
+  const stakingOrchestrator = factories.StakingOrchestrator__factory.connect(
+    contracts.stakingOrchestator,
+    provider,
+  );
+
+  const directory = factories.Directory__factory.connect(
+    contracts.directory,
+    provider,
+  );
+
   return {
     syloToken,
     syloStakingManager,
@@ -112,5 +128,7 @@ export function connectContracts(
     authorizedAccounts,
     rewardsManager,
     ticketing,
+    stakingOrchestrator,
+    directory,
   };
 }

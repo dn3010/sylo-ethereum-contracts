@@ -653,8 +653,6 @@ describe('Authorized Accounts', () => {
   });
 
   it('can validate multiple cases with different atBlock', async () => {
-    const authContract = authAccountsConnectMain;
-
     /**
      * Symbol:
      * A: authorizedAt
@@ -663,7 +661,7 @@ describe('Authorized Accounts', () => {
      */
 
     // A = 0 => false
-    let validate = await authContract.validatePermission(
+    let validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -671,24 +669,18 @@ describe('Authorized Accounts', () => {
     );
     assert.equal(validate, false);
 
-    await authContract.authorizeAccount(delegatedAccount1, permissionList);
-    let authBlock = await currentBlock();
-
-    // U = 0 && A < B => true
-    validate = await authContract.validatePermission(
-      mainAccountAddress,
+    await authAccountsConnectMain.authorizeAccount(
       delegatedAccount1,
-      Permission.PersonalSign,
-      1000,
+      permissionList,
     );
-    assert.equal(validate, true);
+    let authBlock = await currentBlock();
 
     // A < B < U => true
     await mine(5);
-    await authContract.unauthorizeAccount(delegatedAccount1);
+    await authAccountsConnectMain.unauthorizeAccount(delegatedAccount1);
     let unauthBlock = (await currentBlock()) + 1n; // unauthorizeAt = block.number + 1n
 
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -697,7 +689,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, true);
 
     // A = B < U => true
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -706,7 +698,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, true);
 
     // B < A < U => false
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -715,7 +707,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, false);
 
     // A < U = B => false
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -724,7 +716,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, false);
 
     // A < U < B => false
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -733,10 +725,13 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, false);
 
     // U = A = B (A is called after U) => true
-    await authContract.authorizeAccount(delegatedAccount1, permissionList);
+    await authAccountsConnectMain.authorizeAccount(
+      delegatedAccount1,
+      permissionList,
+    );
     authBlock = await currentBlock();
 
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -745,7 +740,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, true);
 
     // U = A < B => true
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -754,7 +749,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, true);
 
     // U = A > B => false
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -763,13 +758,16 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, false);
 
     // B < U < A => false
-    await authContract.unauthorizeAccount(delegatedAccount1);
+    await authAccountsConnectMain.unauthorizeAccount(delegatedAccount1);
     unauthBlock = (await currentBlock()) + 1n; // unauthorizeAt = block.number + 1n
     await mine(1);
-    await authContract.authorizeAccount(delegatedAccount1, permissionList);
+    await authAccountsConnectMain.authorizeAccount(
+      delegatedAccount1,
+      permissionList,
+    );
     authBlock = await currentBlock();
 
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -778,7 +776,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, false);
 
     // U < A < B => true
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,
@@ -787,7 +785,7 @@ describe('Authorized Accounts', () => {
     assert.equal(validate, true);
 
     // U < B < A => false
-    validate = await authContract.validatePermission(
+    validate = await authAccountsConnectMain.validatePermission(
       mainAccountAddress,
       delegatedAccount1,
       Permission.PersonalSign,

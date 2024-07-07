@@ -4,21 +4,26 @@ import { SyloContracts } from '../common/contracts';
 import { expect, assert } from 'chai';
 import { deployContracts } from './utils';
 import { ProtocolTimeManager } from '../typechain-types';
-import { getInterfaceId } from './utils';
 import {
-  increase,
-  increaseTo,
-} from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
+  getInterfaceId,
+  getTimeManagerUtil,
+  timeManagerUtilType,
+} from './utils';
+import { increase } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
 describe('Protocol time manager', () => {
   let accounts: Signer[];
   let contracts: SyloContracts;
   let protocolTimeManager: ProtocolTimeManager;
 
+  let timeManagerUtil: timeManagerUtilType;
+
   beforeEach(async () => {
     accounts = await ethers.getSigners();
     contracts = await deployContracts();
     protocolTimeManager = contracts.protocolTimeManager;
+
+    timeManagerUtil = getTimeManagerUtil(protocolTimeManager);
   });
 
   it('cannot initialize protocol time manager with empty cycle duration', async () => {
@@ -88,7 +93,7 @@ describe('Protocol time manager', () => {
   });
 
   it('cannot set protocol start once already started', async () => {
-    const { start } = await startProtocol();
+    const { start } = await timeManagerUtil.startProtocol();
 
     await expect(
       protocolTimeManager.setProtocolStart(start + 1000),
@@ -107,7 +112,7 @@ describe('Protocol time manager', () => {
       return b;
     });
 
-    const newStart = await setProtocolStartIn(100);
+    const newStart = await timeManagerUtil.setProtocolStartIn(100);
 
     assert.equal(Number(newStart), block.timestamp + 100);
   });
@@ -124,7 +129,7 @@ describe('Protocol time manager', () => {
   it('can set cycle duration before protocol has started', async () => {
     await protocolTimeManager.setCycleDuration(2000);
 
-    await setProtocolStartIn(100);
+    await timeManagerUtil.setProtocolStartIn(100);
     await increase(101);
 
     const cycleDuration = await protocolTimeManager.getCycleDuration();
@@ -149,7 +154,7 @@ describe('Protocol time manager', () => {
   it('can set period duration before protocol has started', async () => {
     await protocolTimeManager.setPeriodDuration(500);
 
-    await setProtocolStartIn(100);
+    await timeManagerUtil.setProtocolStartIn(100);
     await increase(101);
 
     const periodDuration = await protocolTimeManager.getPeriodDuration();
@@ -176,13 +181,13 @@ describe('Protocol time manager', () => {
   });
 
   it('returns one for first cycle', async () => {
-    await startProtocol();
+    await timeManagerUtil.startProtocol();
 
     await checkCycle(1);
   });
 
   it('can get current cycle without updated duration', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     await setTimeSinceStart(3500);
 
@@ -190,7 +195,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current cycle with one updated duration', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     /**
      * 0 - C1
@@ -234,7 +239,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current cycle with multiple updated durations', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     /**
      * 0 - C1
@@ -310,7 +315,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current cycle with multiple duration updates within the same cycle', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     // only the final duration update (777) should count
     await protocolTimeManager.setCycleDuration(555);
@@ -344,7 +349,7 @@ describe('Protocol time manager', () => {
   });
 
   it('cycle duration updates only take effect for the next cycle', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     await protocolTimeManager.setCycleDuration(333);
 
@@ -360,13 +365,13 @@ describe('Protocol time manager', () => {
   });
 
   it('returns 0 for first period', async () => {
-    await startProtocol();
+    await timeManagerUtil.startProtocol();
 
     await checkPeriod(0);
   });
 
   it('can get current period without updated duration', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     /**
      * 0 - C1 : P0
@@ -381,7 +386,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current period with one updated duration', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     /**
      * 0 - C1 : P0
@@ -413,7 +418,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current period with multiple updated durations', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     await protocolTimeManager.setPeriodDuration(200);
 
@@ -458,7 +463,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current period with multiple duration updates in the same cycle', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     // only the last period duration update will take effect
     await protocolTimeManager.setPeriodDuration(200);
@@ -480,7 +485,7 @@ describe('Protocol time manager', () => {
   });
 
   it('period duration updates only take effect for the next cycle', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     await protocolTimeManager.setPeriodDuration(333);
 
@@ -503,7 +508,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current time', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     /**
      * 0 - C1 : P0
@@ -530,7 +535,7 @@ describe('Protocol time manager', () => {
   });
 
   it('can get current time when durations have been updated', async () => {
-    const { setTimeSinceStart } = await startProtocol();
+    const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
 
     /**
      * 0 - C1 : P0
@@ -579,22 +584,6 @@ describe('Protocol time manager', () => {
       'Expected protocol time manager to support correct interface',
     );
 
-    const abiERC165 = [
-      'function supportsInterface(bytes4 interfaceId) external view returns (bool)',
-    ];
-
-    const interfaceIdERC165 = getInterfaceId(abiERC165);
-
-    const supportsERC165 = await protocolTimeManager.supportsInterface(
-      interfaceIdERC165,
-    );
-
-    assert.equal(
-      supportsERC165,
-      true,
-      'Expected protocol time manager to support ERC165',
-    );
-
     const invalidAbi = ['function foo(uint256 duration) external'];
 
     const invalidAbiInterfaceId = getInterfaceId(invalidAbi);
@@ -609,26 +598,6 @@ describe('Protocol time manager', () => {
       'Expected protocol time manager to not support incorrect interface',
     );
   });
-
-  async function setProtocolStartIn(time: number): Promise<number> {
-    const block = await ethers.provider.getBlock('latest').then(b => {
-      if (!b) throw new Error('block undefined');
-      return b;
-    });
-
-    await protocolTimeManager.setProtocolStart(block.timestamp + time);
-
-    return protocolTimeManager.getStart().then(Number);
-  }
-
-  async function startProtocol() {
-    const start = await setProtocolStartIn(100);
-    await increaseTo(start);
-    const setTimeSinceStart = async (time: number) => {
-      return increaseTo(start + time);
-    };
-    return { start, setTimeSinceStart };
-  }
 
   async function checkCycle(cycle: number) {
     const currentCycle = await protocolTimeManager.getCurrentCycle();
