@@ -1,5 +1,5 @@
 import { ethers } from 'hardhat';
-import { Wallet, BigNumberish, HDNodeWallet } from 'ethers';
+import { Wallet, BigNumberish, HDNodeWallet, Block } from 'ethers';
 import { SyloContracts } from '../../common/contracts';
 import { deployContracts, signatureTypes, getLatestBlock } from '../utils';
 import { ContractTransactionResponse, Signer } from 'ethers';
@@ -36,9 +36,9 @@ describe('Ticketing', () => {
     futurepass = contracts.futurepassRegistrar;
 
     await ticketing.setBaseLiveWinProb(2n ** 128n - 1n);
-    sufficientEscrow = (await ticketing.faceValue()) + BigInt(100);
-    insufficientEscrow = (await ticketing.faceValue()) - BigInt(100);
-    penalty = BigInt(500);
+    sufficientEscrow = (await ticketing.faceValue()) + 100n;
+    insufficientEscrow = (await ticketing.faceValue()) - 100n;
+    penalty = 500n;
   });
 
   it('cannot initialize deposits with invalid arguments', async () => {
@@ -53,7 +53,7 @@ describe('Ticketing', () => {
         ethers.ZeroAddress,
         ethers.ZeroAddress,
         ethers.ZeroAddress,
-        insufficientEscrow,
+        1n,
         1n,
         1n,
         1n,
@@ -157,11 +157,6 @@ describe('Ticketing', () => {
       ticketing.connect(accounts[1]).setMultiReceiverFaceValue,
       0n,
     );
-
-    await updateParam(
-      ticketing.connect(accounts[1]).setMultiReceiverFaceValue,
-      0n,
-    );
   });
 
   it('cannot redeem ticket with future block', async () => {
@@ -198,21 +193,15 @@ describe('Ticketing', () => {
 
   it('cannot redeem ticket with empty sender', async () => {
     const block = await getLatestBlock();
-    const { ticket } = await createTicket(
-      1,
-      ethers.ZeroAddress,
-      ethers.ZeroAddress,
-      ethers.ZeroAddress,
-      block.number,
-      '0x',
-    );
+    const { alice, bob, redeemer } = await getUsers();
 
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
+    const { ticket, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
+    ticket.sender = ethers.ZeroAddress;
 
     await expect(
       ticketing.redeem(ticket, 0, senderSig, senderSig),
@@ -224,23 +213,15 @@ describe('Ticketing', () => {
 
   it('cannot redeem ticket with empty receiver', async () => {
     const block = await getLatestBlock();
-    const { alice } = await getUsers();
+    const { alice, bob, redeemer } = await getUsers();
 
-    const { ticket } = await createTicket(
-      1,
-      alice.address,
-      ethers.ZeroAddress,
-      ethers.ZeroAddress,
-      block.number,
-      '0x',
+    const { ticket, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    ticket.receiver = ethers.ZeroAddress;
 
     await expect(
       ticketing.redeem(ticket, 0, senderSig, senderSig),
@@ -252,23 +233,15 @@ describe('Ticketing', () => {
 
   it('cannot redeem ticket with empty redeemer', async () => {
     const block = await getLatestBlock();
-    const { alice, bob } = await getUsers();
+    const { alice, bob, redeemer } = await getUsers();
 
-    const { ticket } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      ethers.ZeroAddress,
-      block.number,
-      '0x',
+    const { ticket, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    ticket.redeemer = ethers.ZeroAddress;
 
     await expect(
       ticketing.redeem(ticket, 0, senderSig, senderSig),
@@ -282,20 +255,11 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers();
 
-    const { ticket } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      '0x',
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
+    const { ticket, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
 
     await expect(
@@ -335,21 +299,13 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers();
 
-    const { ticket } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
+    const { ticket, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    senderSig.signature = '0x';
 
     await expect(
       ticketing.redeem(ticket, redeemerRand, senderSig, senderSig),
@@ -359,24 +315,15 @@ describe('Ticketing', () => {
   it('cannot redeem ticket with invalid signature', async () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers();
+    const random = Wallet.createRandom();
 
-    const { ticket, ticketHash } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
+    const { ticket, ticketHash, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
-
-    const senderSignature = await bob.signMessage(ethers.getBytes(ticketHash));
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    senderSig.signature = await random.signMessage(ethers.getBytes(ticketHash));
 
     await expect(
       ticketing.redeem(ticket, redeemerRand, senderSig, senderSig),
@@ -387,20 +334,14 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, aliceDelegated, bob, redeemer } = await getUsers();
 
-    const { ticket } = await createTicket(
+    const { ticket, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
+      aliceDelegated,
+      undefined,
       1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.authorizedAccount,
-      '0x00',
-      aliceDelegated.address,
-      createEmptyAttachedAuthorizedAccount(),
     );
 
     await expect(
@@ -410,6 +351,7 @@ describe('Ticketing', () => {
 
   it('cannot redeem ticket with invalid authorized account signature', async () => {
     const { alice, aliceDelegated, bob, redeemer } = await getUsers();
+    const random = Wallet.createRandom();
 
     await authorizedAccounts
       .connect(alice)
@@ -426,7 +368,7 @@ describe('Ticketing', () => {
       createCommit(BigInt(block.number), redeemerRand),
     );
 
-    const invalidAuthorizedSignature = await bob.signMessage(
+    const invalidAuthorizedSignature = await random.signMessage(
       ethers.getBytes(ticketHash),
     );
 
@@ -446,30 +388,10 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, bobDelegated, redeemer } = await getUsers();
 
-    const { ticket, ticketHash } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
     const proofMessage =
       await authorizedAccounts.createAttachedAuthorizedAccountProofMessage(
         bobDelegated.address,
-        block.timestamp + 10,
+        block.timestamp + 10000,
         'prefix',
         'suffix',
         'infixOne',
@@ -479,23 +401,17 @@ describe('Ticketing', () => {
       Buffer.from(proofMessage.slice(2), 'hex'),
     );
 
-    const receiverAuthorizedSignature = await bobDelegated.signMessage(
-      ethers.getBytes(ticketHash),
+    const { ticket, senderSig, receiverSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
+      undefined,
+      bobDelegated,
+      2,
+      proof,
     );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.attachedAccount,
-      receiverAuthorizedSignature,
-      bobDelegated.address,
-      {
-        account: bobDelegated.address,
-        expiry: block.timestamp + 10,
-        proof: proof,
-        prefix: 'nil',
-        suffix: 'suffix',
-        infixOne: 'infixOne',
-      },
-    );
+    receiverSig.attachedAuthorizedAccount.prefix = 'nil';
 
     await expect(
       ticketing.redeem(ticket, redeemerRand, senderSig, receiverSig),
@@ -505,30 +421,10 @@ describe('Ticketing', () => {
     );
   });
 
-  it('cannot redeem ticket with invalid attached authorized account signature', async () => {
+  it('cannot redeem ticket with invalid receiver attached authorized account signature', async () => {
     const block = await getLatestBlock();
     const { alice, bob, bobDelegated, redeemer } = await getUsers();
     const random = Wallet.createRandom();
-
-    const { ticket, ticketHash } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
 
     const proofMessage =
       await authorizedAccounts.createAttachedAuthorizedAccountProofMessage(
@@ -538,9 +434,19 @@ describe('Ticketing', () => {
         'suffix',
         'infixOne',
       );
-
     const proof = await bob.signMessage(
       Buffer.from(proofMessage.slice(2), 'hex'),
+    );
+
+    const { ticket, ticketHash, senderSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
+      undefined,
+      bobDelegated,
+      2,
+      proof,
     );
 
     const receiverAuthorizedSignature = await random.signMessage(
@@ -550,7 +456,7 @@ describe('Ticketing', () => {
     const receiverSig = createUserSignature(
       signatureTypes.attachedAccount,
       receiverAuthorizedSignature,
-      bobDelegated.address,
+      ethers.ZeroAddress,
       {
         account: bobDelegated.address,
         expiry: block.timestamp + 10,
@@ -570,35 +476,11 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers();
 
-    const { ticket, ticketHash } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
+    const { ticket, senderSig, receiverSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
 
     await ticketing.setBaseLiveWinProb(0);
@@ -612,35 +494,11 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers(sufficientEscrow, penalty);
 
-    const { ticket, ticketHash } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
+    const { ticket, senderSig, receiverSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
 
     await checkDeposit(sufficientEscrow, penalty, alice.address);
@@ -674,35 +532,11 @@ describe('Ticketing', () => {
       penalty,
     );
 
-    const { ticket, ticketHash } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
+    const { ticket, senderSig, receiverSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
     );
 
     await checkDeposit(insufficientEscrow, penalty, alice.address);
@@ -735,35 +569,14 @@ describe('Ticketing', () => {
 
     const block = await getLatestBlock();
 
-    const { ticket, ticketHash } = await createTicket(
+    const { ticket, senderSig, receiverSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
+      aliceDelegated,
+      undefined,
       1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await aliceDelegated.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.authorizedAccount,
-      senderSignature,
-      aliceDelegated.address,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
     );
 
     await checkDeposit(sufficientEscrow, penalty, alice.address);
@@ -798,35 +611,14 @@ describe('Ticketing', () => {
 
     const block = await getLatestBlock();
 
-    const { ticket, ticketHash } = await createTicket(
+    const { ticket, senderSig, receiverSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
+      undefined,
+      bobDelegated,
       1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bobDelegated.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.authorizedAccount,
-      receiverSignature,
-      bobDelegated.address,
-      createEmptyAttachedAuthorizedAccount(),
     );
 
     await checkDeposit(sufficientEscrow, penalty, alice.address);
@@ -868,42 +660,15 @@ describe('Ticketing', () => {
       Buffer.from(proofMessage.slice(2), 'hex'),
     );
 
-    const { ticket, ticketHash } = await createTicket(
-      1,
-      alice.address,
-      await bob.getAddress(),
-      redeemer.address,
-      block.number,
-      createCommit(BigInt(block.number), redeemerRand),
-    );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bobDelegated.signMessage(
-      ethers.getBytes(ticketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.attachedAccount,
-      receiverSignature,
-      ethers.ZeroAddress,
-      {
-        account: bobDelegated.address,
-        expiry: block.timestamp + 10000,
-        proof: proof,
-        prefix: 'prefix',
-        suffix: 'suffix',
-        infixOne: 'infixOne',
-      },
+    const { ticket, senderSig, receiverSig } = await createSignedTicket(
+      alice,
+      bob,
+      redeemer,
+      block,
+      undefined,
+      bobDelegated,
+      2,
+      proof,
     );
 
     await checkDeposit(sufficientEscrow, penalty, alice.address);
@@ -960,21 +725,11 @@ describe('Ticketing', () => {
 
   it('cannot redeem multireceiver ticket with empty sender', async () => {
     const block = await getLatestBlock();
+    const { alice, bob, redeemer } = await getUsers();
 
-    const { multiReceiverTicket } = await createMultiReceiverTicket(
-      1,
-      ethers.ZeroAddress,
-      ethers.ZeroAddress,
-      block.number,
-      '0x',
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
+    multiReceiverTicket.sender = ethers.ZeroAddress;
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -992,22 +747,11 @@ describe('Ticketing', () => {
 
   it('cannot redeem multireceiver ticket with empty receiver', async () => {
     const block = await getLatestBlock();
-    const { alice } = await getUsers();
+    const { alice, bob, redeemer } = await getUsers();
 
-    const { multiReceiverTicket } = await createMultiReceiverTicket(
-      1,
-      alice.address,
-      ethers.ZeroAddress,
-      block.number,
-      '0x',
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
+    multiReceiverTicket.redeemer = ethers.ZeroAddress;
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1025,22 +769,11 @@ describe('Ticketing', () => {
 
   it('cannot redeem multireceiver ticket with empty redeemer', async () => {
     const block = await getLatestBlock();
-    const { alice, bob } = await getUsers();
+    const { alice, bob, redeemer } = await getUsers();
 
-    const { multiReceiverTicket } = await createMultiReceiverTicket(
-      1,
-      alice.address,
-      ethers.ZeroAddress,
-      block.number,
-      '0x',
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
+    multiReceiverTicket.redeemer = ethers.ZeroAddress;
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1058,23 +791,11 @@ describe('Ticketing', () => {
 
   it('cannot redeem multireceiver ticket without receiver futurepass', async () => {
     const block = await getLatestBlock();
-    const { alice, redeemer } = await getUsers();
+    const { alice, bob, redeemer } = await getUsers();
     const random = Wallet.createRandom();
 
-    const { multiReceiverTicket } = await createMultiReceiverTicket(
-      1,
-      alice.address,
-      redeemer.address,
-      block.number,
-      '0x',
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1093,25 +814,13 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers();
 
-    const { multiReceiverTicket } = await createMultiReceiverTicket(
-      1,
-      alice.address,
-      redeemer.address,
-      block.number,
-      '0x',
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      '0x00',
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
 
     await expect(
       ticketing.redeemMultiReceiver(
         multiReceiverTicket,
-        redeemerRand,
+        2n,
         await bob.getAddress(),
         senderSig,
         senderSig,
@@ -1156,35 +865,8 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers();
 
-    const { multiReceiverTicket, multiReceiverTicketHash } =
-      await createMultiReceiverTicket(
-        1,
-        alice.address,
-        redeemer.address,
-        block.number,
-        createCommit(BigInt(block.number), redeemerRand),
-      );
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig, receiverSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
 
     await ticketing.setBaseLiveWinProb(0);
 
@@ -1203,36 +885,8 @@ describe('Ticketing', () => {
     const block = await getLatestBlock();
     const { alice, bob, redeemer } = await getUsers(sufficientEscrow, penalty);
 
-    const { multiReceiverTicket, multiReceiverTicketHash } =
-      await createMultiReceiverTicket(
-        1,
-        alice.address,
-        redeemer.address,
-        block.number,
-        createCommit(BigInt(block.number), redeemerRand),
-      );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig, receiverSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
 
     await checkDeposit(sufficientEscrow, penalty, alice.address);
 
@@ -1282,36 +936,8 @@ describe('Ticketing', () => {
       penalty,
     );
 
-    const { multiReceiverTicket, multiReceiverTicketHash } =
-      await createMultiReceiverTicket(
-        1,
-        alice.address,
-        redeemer.address,
-        block.number,
-        createCommit(BigInt(block.number), redeemerRand),
-      );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
+    const { multiReceiverTicket, senderSig, receiverSig } =
+      await createMultiReceiverSignedTicket(alice, bob, redeemer, block);
 
     await checkDeposit(insufficientEscrow, penalty, alice.address);
 
@@ -1351,36 +977,16 @@ describe('Ticketing', () => {
 
     const block = await getLatestBlock();
 
-    const { multiReceiverTicket, multiReceiverTicketHash } =
-      await createMultiReceiverTicket(
+    const { multiReceiverTicket, senderSig, receiverSig } =
+      await createMultiReceiverSignedTicket(
+        alice,
+        bob,
+        redeemer,
+        block,
+        aliceDelegated,
+        undefined,
         1,
-        alice.address,
-        redeemer.address,
-        block.number,
-        createCommit(BigInt(block.number), redeemerRand),
       );
-
-    const senderSignature = await aliceDelegated.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.authorizedAccount,
-      senderSignature,
-      aliceDelegated.address,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bob.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.main,
-      receiverSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
 
     await checkDeposit(sufficientEscrow, penalty, alice.address);
 
@@ -1422,36 +1028,16 @@ describe('Ticketing', () => {
 
     const block = await getLatestBlock();
 
-    const { multiReceiverTicket, multiReceiverTicketHash } =
-      await createMultiReceiverTicket(
+    const { multiReceiverTicket, senderSig, receiverSig } =
+      await createMultiReceiverSignedTicket(
+        alice,
+        bob,
+        redeemer,
+        block,
+        undefined,
+        bobDelegated,
         1,
-        alice.address,
-        redeemer.address,
-        block.number,
-        createCommit(BigInt(block.number), redeemerRand),
       );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bobDelegated.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.authorizedAccount,
-      receiverSignature,
-      bobDelegated.address,
-      createEmptyAttachedAuthorizedAccount(),
-    );
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1498,43 +1084,18 @@ describe('Ticketing', () => {
       Buffer.from(proofMessage.slice(2), 'hex'),
     );
 
-    const { multiReceiverTicket, multiReceiverTicketHash } =
-      await createMultiReceiverTicket(
-        1,
-        alice.address,
-        redeemer.address,
-        block.number,
-        createCommit(BigInt(block.number), redeemerRand),
+    const { multiReceiverTicket, senderSig, receiverSig } =
+      await createMultiReceiverSignedTicket(
+        alice,
+        bob,
+        redeemer,
+        block,
+
+        undefined,
+        bobDelegated,
+        2,
+        proof,
       );
-
-    const senderSignature = await alice.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const senderSig = createUserSignature(
-      signatureTypes.main,
-      senderSignature,
-      ethers.ZeroAddress,
-      createEmptyAttachedAuthorizedAccount(),
-    );
-
-    const receiverSignature = await bobDelegated.signMessage(
-      ethers.getBytes(multiReceiverTicketHash),
-    );
-
-    const receiverSig = createUserSignature(
-      signatureTypes.attachedAccount,
-      receiverSignature,
-      ethers.ZeroAddress,
-      {
-        account: bobDelegated.address,
-        expiry: block.timestamp + 10000,
-        proof: proof,
-        prefix: 'prefix',
-        suffix: 'suffix',
-        infixOne: 'infixOne',
-      },
-    );
 
     await checkDeposit(sufficientEscrow, penalty, alice.address);
 
@@ -1599,7 +1160,7 @@ describe('Ticketing', () => {
       createEmptyAttachedAuthorizedAccount(),
     );
 
-    await mine((await ticketing.ticketDuration()) + BigInt(10));
+    await mine((await ticketing.ticketDuration()) + 10n);
 
     await expect(
       ticketing.redeemMultiReceiver(
@@ -1728,6 +1289,206 @@ describe('Ticketing', () => {
     expect(deposit.escrow).to.equal(escrow);
     expect(deposit.penalty).to.equal(penalty);
   };
+
+  async function createSignedTicket(
+    sender: HDNodeWallet,
+    receiver: Signer,
+    node: HDNodeWallet,
+    block: Block,
+    senderDelegated?: HDNodeWallet,
+    receiverDelegated?: HDNodeWallet,
+    sigType?: number,
+    proof?: string,
+  ): Promise<{
+    ticket: ITicketing.TicketStruct;
+    ticketHash: string;
+    senderSig: ITicketing.UserSignatureStruct;
+    receiverSig: ITicketing.UserSignatureStruct;
+  }> {
+    const { ticket, ticketHash } = await createTicket(
+      1,
+      sender.address,
+      await receiver.getAddress(),
+      node.address,
+      block.number,
+      createCommit(BigInt(block.number), 1),
+    );
+
+    let senderSig: ITicketing.UserSignatureStruct;
+    let senderSignature: string;
+    if (sigType == signatureTypes.authorizedAccount && senderDelegated) {
+      senderSignature = await senderDelegated.signMessage(
+        ethers.getBytes(ticketHash),
+      );
+      senderSig = createUserSignature(
+        signatureTypes.authorizedAccount,
+        senderSignature,
+        senderDelegated.address,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    } else {
+      senderSignature = await sender.signMessage(ethers.getBytes(ticketHash));
+      senderSig = createUserSignature(
+        signatureTypes.main,
+        senderSignature,
+        ethers.ZeroAddress,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    }
+
+    let receiverSig: ITicketing.UserSignatureStruct;
+    let receiverSignature: string;
+    if (sigType == signatureTypes.authorizedAccount && receiverDelegated) {
+      receiverSignature = await receiverDelegated.signMessage(
+        ethers.getBytes(ticketHash),
+      );
+      receiverSig = createUserSignature(
+        signatureTypes.authorizedAccount,
+        receiverSignature,
+        receiverDelegated.address,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    } else if (
+      sigType == signatureTypes.attachedAccount &&
+      receiverDelegated &&
+      proof
+    ) {
+      receiverSignature = await receiverDelegated.signMessage(
+        ethers.getBytes(ticketHash),
+      );
+      receiverSig = createUserSignature(
+        signatureTypes.attachedAccount,
+        receiverSignature,
+        ethers.ZeroAddress,
+        {
+          account: receiverDelegated.address,
+          expiry: block.timestamp + 10000,
+          proof: proof,
+          prefix: 'prefix',
+          suffix: 'suffix',
+          infixOne: 'infixOne',
+        },
+      );
+    } else {
+      receiverSignature = await receiver.signMessage(
+        ethers.getBytes(ticketHash),
+      );
+      receiverSig = createUserSignature(
+        signatureTypes.main,
+        receiverSignature,
+        ethers.ZeroAddress,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    }
+
+    return {
+      ticket,
+      ticketHash,
+      senderSig,
+      receiverSig,
+    };
+  }
+
+  async function createMultiReceiverSignedTicket(
+    sender: HDNodeWallet,
+    receiver: Signer,
+    node: HDNodeWallet,
+    block: Block,
+    senderDelegated?: HDNodeWallet,
+    receiverDelegated?: HDNodeWallet,
+    sigType?: number,
+    proof?: string,
+  ): Promise<{
+    multiReceiverTicket: ITicketing.MultiReceiverTicketStruct;
+    multiReceiverTicketHash: string;
+    senderSig: ITicketing.UserSignatureStruct;
+    receiverSig: ITicketing.UserSignatureStruct;
+  }> {
+    const { multiReceiverTicket, multiReceiverTicketHash } =
+      await createMultiReceiverTicket(
+        1,
+        sender.address,
+        node.address,
+        block.number,
+        createCommit(BigInt(block.number), 1),
+      );
+
+    let senderSig: ITicketing.UserSignatureStruct;
+    let senderSignature: string;
+    if (sigType == signatureTypes.authorizedAccount && senderDelegated) {
+      senderSignature = await senderDelegated.signMessage(
+        ethers.getBytes(multiReceiverTicketHash),
+      );
+      senderSig = createUserSignature(
+        signatureTypes.authorizedAccount,
+        senderSignature,
+        senderDelegated.address,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    } else {
+      senderSignature = await sender.signMessage(
+        ethers.getBytes(multiReceiverTicketHash),
+      );
+      senderSig = createUserSignature(
+        signatureTypes.main,
+        senderSignature,
+        ethers.ZeroAddress,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    }
+
+    let receiverSig: ITicketing.UserSignatureStruct;
+    let receiverSignature: string;
+    if (sigType == signatureTypes.authorizedAccount && receiverDelegated) {
+      receiverSignature = await receiverDelegated.signMessage(
+        ethers.getBytes(multiReceiverTicketHash),
+      );
+      receiverSig = createUserSignature(
+        signatureTypes.authorizedAccount,
+        receiverSignature,
+        receiverDelegated.address,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    } else if (
+      sigType == signatureTypes.attachedAccount &&
+      receiverDelegated &&
+      proof
+    ) {
+      receiverSignature = await receiverDelegated.signMessage(
+        ethers.getBytes(multiReceiverTicketHash),
+      );
+      receiverSig = createUserSignature(
+        signatureTypes.attachedAccount,
+        receiverSignature,
+        ethers.ZeroAddress,
+        {
+          account: receiverDelegated.address,
+          expiry: block.timestamp + 10000,
+          proof: proof,
+          prefix: 'prefix',
+          suffix: 'suffix',
+          infixOne: 'infixOne',
+        },
+      );
+    } else {
+      receiverSignature = await receiver.signMessage(
+        ethers.getBytes(multiReceiverTicketHash),
+      );
+      receiverSig = createUserSignature(
+        signatureTypes.main,
+        receiverSignature,
+        ethers.ZeroAddress,
+        createEmptyAttachedAuthorizedAccount(),
+      );
+    }
+
+    return {
+      multiReceiverTicket,
+      multiReceiverTicketHash,
+      senderSig,
+      receiverSig,
+    };
+  }
 });
 
 function createEmptyAttachedAuthorizedAccount(): IAuthorizedAccounts.AttachedAuthorizedAccountStruct {
