@@ -216,39 +216,33 @@ describe('Seeker Stats', () => {
     );
   });
 
-  it('cannot calculate converage with unregistered seeker', async () => {
+  it('cannot get stats of unregistered seeker', async () => {
     const seeker = createRandomSeeker();
 
-    await expect(seekerStatsOracle.calculateAttributeCoverage([seeker]))
+    await expect(seekerStatsOracle.getSeekerStats(seeker.seekerId))
       .to.be.revertedWithCustomError(seekerStatsOracle, 'SeekerNotRegistered')
       .withArgs(seeker.seekerId);
   });
 
-  it('can calculate converage with registered seeker', async () => {
-    const seekerList = await createAndRegisterSeeker(1);
-
-    const attributeConverageExpected = calculateAttributesCoverage(seekerList);
-    const attributeCoverage =
-      await seekerStatsOracle.calculateAttributeCoverage(seekerList);
-    const formatedCoverage = ethers.formatEther(attributeCoverage);
-
-    assert.equal(
-      Number(formatedCoverage).toFixed(0),
-      attributeConverageExpected.toFixed(0),
-    );
-  });
-
-  it('can calculate converage with multiple registered seeker', async () => {
+  it.only('can calculate coverage from attribute totals', async () => {
     const seekerList = await createAndRegisterSeeker(5);
 
-    const attributeConverageExpected = calculateAttributesCoverage(seekerList);
+    const attributeCoverageExpected = calculateAttributesCoverage(seekerList);
     const attributeCoverage =
-      await seekerStatsOracle.calculateAttributeCoverage(seekerList);
+      await seekerStatsOracle.calculateAttributeCoverage(
+        attributeCoverageExpected.totalReactor,
+        attributeCoverageExpected.totalCores,
+        attributeCoverageExpected.totalDurability,
+        attributeCoverageExpected.totalSensors,
+        attributeCoverageExpected.totalStorage,
+        attributeCoverageExpected.totalChip,
+      );
+    console.log(attributeCoverageExpected.coverage, attributeCoverage);
     const formatedCoverage = ethers.formatEther(attributeCoverage);
 
     assert.equal(
       Number(formatedCoverage).toFixed(0),
-      attributeConverageExpected.toFixed(0),
+      attributeCoverageExpected.coverage.toFixed(0),
     );
   });
 
@@ -258,7 +252,7 @@ describe('Seeker Stats', () => {
       'function createProofMessage((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external pure returns (bytes memory)',
       'function registerSeekerRestricted((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external',
       'function registerSeeker((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker, bytes calldata signature) external',
-      'function calculateAttributeCoverage((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)[] calldata seekersList) external view returns (int256)',
+      'function calculateAttributeCoverage((uint256,uint256,uint256,uint256,uint256,uint256) external view returns (int256)',
       'function isSeekerRegistered((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external view returns (bool)',
       'function getSeekerStats(uint256 seekerId) external view returns ((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) memory)',
     ];
@@ -274,7 +268,15 @@ describe('Seeker Stats', () => {
     );
   });
 
-  function calculateAttributesCoverage(seekers: Seeker[]): number {
+  function calculateAttributesCoverage(seekers: Seeker[]): {
+    coverage: number;
+    totalReactor: number;
+    totalCores: number;
+    totalSensors: number;
+    totalDurability: number;
+    totalStorage: number;
+    totalChip: number;
+  } {
     const angleRadians = Math.sin((2 * Math.PI) / 6 + 2 * Math.PI);
 
     let coverage = 0;
@@ -311,7 +313,15 @@ describe('Seeker Stats', () => {
     coverage += (totalStorage * angleRadians * totalChip) / 2;
     coverage += (totalChip * angleRadians * totalReactor) / 2;
 
-    return coverage;
+    return {
+      coverage,
+      totalReactor,
+      totalCores,
+      totalDurability,
+      totalSensors,
+      totalStorage,
+      totalChip,
+    };
   }
 
   async function createAndRegisterSeeker(amount: number): Promise<Seeker[]> {

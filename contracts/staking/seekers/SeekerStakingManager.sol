@@ -130,7 +130,7 @@ contract SeekerStakingManager is
             revert SenderMustOwnSeekerId();
         }
         // Register a seeker if not registered yet
-        if (!oracle.isSeekerRegistered(seeker)) {
+        if (!oracle.isSeekerRegistered(seeker.seekerId)) {
             if (seekerStatsProof.length == 0) {
                 revert SeekerProofCannotBeEmpty();
             }

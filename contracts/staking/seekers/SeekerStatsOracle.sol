@@ -34,6 +34,9 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
     int256 private coverageAngle =
         Trigonometry.sin(((Trigonometry.TWO_PI / 6) + Trigonometry.TWO_PI));
 
+    int256 public coverageAnglePub =
+        Trigonometry.sin(Trigonometry.TWO_PI / 6);
+
     event SeekerStatsUpdated(
         uint256 indexed seekerId,
         uint256 attrReactor,
@@ -174,60 +177,40 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
 
     /**
      * @notice Validates that the contract has registered the given seeker
-     * @param seeker The object containing the seeker statistics
+     * @param seekerId The id of the seeker
      */
-    function isSeekerRegistered(Seeker calldata seeker) external view returns (bool) {
-        return _isSeekerRegistered(seeker);
+    function isSeekerRegistered(uint256 seekerId) external view returns (bool) {
+        return _isSeekerRegistered(seekerId);
     }
 
-    function _isSeekerRegistered(Seeker memory seeker) internal view returns (bool) {
+    function _isSeekerRegistered(uint256 seekerId) internal view returns (bool) {
         return
-            keccak256(abi.encode(seekerStats[seeker.seekerId])) !=
+            keccak256(abi.encode(seekerStats[seekerId])) !=
             keccak256(abi.encode(defaultSeeker));
     }
 
     /**
-     * @notice Calculates the coverage score for the given seekers. This score is used by
+     * @notice Calculates the coverage score for a given set of attributes. This score is used by
      *  nodes to determine the staking capacity and is a reflection of the diversity
      *  in attributes of the seekers staked against the node.
-     * @param seekers A list containing seekers, will revert if any seeker is not registered.
+     * @param attrReactor Attribute reactor value
+     * @param attrCores Attribute core value
+     * @param attrDurability Attribute durability value
+     * @param attrSensors Attribute sensors value
+     * @param attrStorage Attribute storage value
+     * @param attrChip Attribute chip value
      */
-    function calculateAttributeCoverage(Seeker[] calldata seekers) external view returns (int256) {
+    function calculateAttributeCoverage(uint256 attrReactor, uint256 attrCores, uint256 attrDurability, uint256 attrSensors, uint256 attrStorage, uint256 attrChip) external view returns (int256) {
         int256 coverage = 0;
 
-        int256 totalReactor = 0;
-        int256 totalCores = 0;
-        int256 totalDurability = 0;
-        int256 totalSensors = 0;
-        int256 totalStorage = 0;
-        int256 totalChip = 0;
+        coverage += int256(attrReactor) * int256(attrCores);
+        coverage += int256(attrCores) * int256(attrDurability);
+        coverage += int256(attrDurability) * int256(attrSensors);
+        coverage += int256(attrSensors) * int256(attrStorage);
+        coverage += int256(attrStorage) * int256(attrChip);
+        coverage += int256(attrChip) * int256(attrReactor);
 
-        for (uint256 i = 0; i < seekers.length; i++) {
-            Seeker memory seeker = seekers[i];
-            Seeker memory registeredSeeker = seekerStats[seeker.seekerId];
-
-            // We validate the seeker has been registered by checking if it is
-            // not equal to the default, empty-value Seeker.
-            if (!_isSeekerRegistered(registeredSeeker)) {
-                revert SeekerNotRegistered(seeker.seekerId);
-            }
-
-            totalReactor += int256(registeredSeeker.attrReactor);
-            totalCores += int256(registeredSeeker.attrCores);
-            totalDurability += int256(registeredSeeker.attrDurability);
-            totalSensors += int256(registeredSeeker.attrSensors);
-            totalStorage += int256(registeredSeeker.attrStorage);
-            totalChip += int256(registeredSeeker.attrChip);
-        }
-
-        coverage += (int256(totalReactor) * coverageAngle * int256(totalCores)) / 2;
-        coverage += (int256(totalCores) * coverageAngle * int256(totalDurability)) / 2;
-        coverage += (int256(totalDurability) * coverageAngle * int256(totalSensors)) / 2;
-        coverage += (int256(totalSensors) * coverageAngle * int256(totalStorage)) / 2;
-        coverage += (int256(totalStorage) * coverageAngle * int256(totalChip)) / 2;
-        coverage += (int256(totalChip) * coverageAngle * int256(totalReactor)) / 2;
-
-        return coverage;
+        return coverage * coverageAngle / 2;
     }
 
     /**
@@ -235,6 +218,12 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
      * @param seekerId Id of the seekers statistics to retrieve
      */
     function getSeekerStats(uint256 seekerId) external view returns (Seeker memory) {
+        // We validate the seeker has been registered by checking if it is
+        // not equal to the default, empty-value Seeker.
+        if (!_isSeekerRegistered(seekerId)) {
+            revert SeekerNotRegistered(seekerId);
+        }
+
         return seekerStats[seekerId];
     }
 }
