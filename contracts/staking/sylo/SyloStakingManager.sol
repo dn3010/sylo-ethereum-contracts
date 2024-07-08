@@ -69,7 +69,9 @@ contract SyloStakingManager is
      * `interfaceId` from ERC165.
      */
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
-        return interfaceId == type(ISyloStakingManager).interfaceId;
+        return
+            interfaceId == type(ISyloStakingManager).interfaceId ||
+            super.supportsInterface(interfaceId);
     }
 
     function setUnlockDuration(uint256 _unlockDuration) external onlyOwner {

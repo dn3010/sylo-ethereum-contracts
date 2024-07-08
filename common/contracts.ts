@@ -16,6 +16,8 @@ export const DeployedContractNames = {
   ticketing: 'Ticketing',
   stakingOrchestrator: 'StakingOrchestrator',
   direcrory: 'Directory',
+  futurepass: 'FuturepassRegistrar',
+  deposits: 'Deposits',
 };
 
 export const ContractNames = {
@@ -32,10 +34,12 @@ export type SyloContracts = {
   protocolTimeManager: factories.contracts.ProtocolTimeManager;
   registries: factories.contracts.Registries;
   authorizedAccounts: factories.contracts.AuthorizedAccounts;
-  rewardsManager: factories.contracts.RewardsManager;
-  ticketing: factories.contracts.Ticketing;
+  rewardsManager: factories.contracts.payments.RewardsManager;
+  ticketing: factories.contracts.payments.Ticketing;
   stakingOrchestrator: factories.contracts.staking.StakingOrchestrator;
   directory: factories.contracts.Directory;
+  futurepassRegistrar: factories.contracts.mocks.TestFuturepassRegistrar;
+  deposits: factories.contracts.payments.Deposits;
 };
 
 export type ContractAddresses = {
@@ -47,10 +51,12 @@ export type ContractAddresses = {
   protocolTimeManager: string;
   registries: string;
   authorizedAccounts: string;
+  deposits: string;
   rewardsManager: string;
   ticketing: string;
   stakingOrchestator: string;
   directory: string;
+  futurepassRegistrar: string;
 };
 
 export function connectContracts(
@@ -97,8 +103,8 @@ export function connectContracts(
     provider,
   );
 
-  const rewardsManager = factories.RewardsManager__factory.connect(
-    contracts.rewardsManager,
+  const deposits = factories.Deposits__factory.connect(
+    contracts.ticketing,
     provider,
   );
 
@@ -117,6 +123,17 @@ export function connectContracts(
     provider,
   );
 
+  const futurepassRegistrar =
+    factories.TestFuturepassRegistrar__factory.connect(
+      contracts.futurepassRegistrar,
+      provider,
+    );
+
+  const rewardsManager = factories.RewardsManager__factory.connect(
+    contracts.rewardsManager,
+    provider,
+  );
+
   return {
     syloToken,
     syloStakingManager,
@@ -126,9 +143,11 @@ export function connectContracts(
     protocolTimeManager,
     registries,
     authorizedAccounts,
-    rewardsManager,
+    deposits,
     ticketing,
+    rewardsManager,
     stakingOrchestrator,
     directory,
+    futurepassRegistrar,
   };
 }

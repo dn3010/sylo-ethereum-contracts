@@ -3,10 +3,10 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "./libraries/SyloUtils.sol";
+import "../libraries/SyloUtils.sol";
 
 import "./IRewardsManager.sol";
-import "./Registries.sol";
+import "../Registries.sol";
 import "./Ticketing.sol";
 import "./ITicketing.sol";
 
@@ -21,11 +21,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      * @notice Registries contract
      */
     Registries public registries;
-
-    /**
-     * @notice Ticketing contract
-     */
-    Ticketing public ticketing;
 
     /**
      * @notice Tracks claims from staker accounts
@@ -60,7 +55,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         }
 
         registries = _registries;
-        ticketing = _ticketing;
 
         _grantRole(onlyTicketing, address(_ticketing));
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -88,9 +82,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         uint256 cycle,
         uint256 amount
     ) external onlyRole(onlyTicketing) {
-        if (address(0) == node) {
-            revert CannotIncrementRewardPoolWithZeroNodeAddress();
-        }
         if (amount == 0) {
             revert CannotIncrementRewardPoolWithZeroAmount();
         }
@@ -122,7 +113,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     ) external view returns (uint256[] memory) {
         uint256[] memory rewards = new uint256[](cycles.length);
         for (uint i = 0; i < cycles.length; i++) {
-            rewards[i] = rewardPools[node][i];
+            rewards[i] = rewardPools[node][cycles[i]];
         }
         return rewards;
     }

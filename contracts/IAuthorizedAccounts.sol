@@ -87,7 +87,7 @@ interface IAuthorizedAccounts {
         address authorized,
         Permission permission,
         uint256 atBlock
-    ) external returns (bool);
+    ) external view returns (bool);
 
     function getAuthorizedAccounts(
         address main
