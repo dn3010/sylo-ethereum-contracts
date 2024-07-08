@@ -2,12 +2,14 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableMap.sol";
 
 import "./IStakingOrchestrator.sol";
 import "../IProtocolTimeManager.sol";
+import "./seekers/ISeekerStatsOracle.sol";
 
 contract StakingOrchestrator is
     IStakingOrchestrator,
@@ -15,8 +17,11 @@ contract StakingOrchestrator is
     Ownable2StepUpgradeable,
     ERC165
 {
-    /**   sdf  */
     IProtocolTimeManager public protocolTimeManager;
+
+    ISeekerStatsOracle public seekerStatsOracle;
+
+    uint256 capacityCoverageMultiplier;
 
     uint256 capacityPenaltyFactor;
 
@@ -47,18 +52,25 @@ contract StakingOrchestrator is
         uint256 amount;
     }
 
-    // The stake a Node will have for a directory is determined by the total
-    // stake supplied by its users at the time of the directory, and also the
-    // Seekers staked by the users. We track and update the node's current directory
-    // stake whenever the Sylos or Seekers staked to it change.
-    mapping(address => uint256) directoryStakes;
-
     mapping(address => mapping(uint256 => uint256)) cycleStakesByNode;
-
-    // mapping(address => mapping (address => UserRewardCycleStake[])) rewardCycleStakesByUser;
 
     mapping(address => mapping(address => mapping(uint256 => UserCycleStake))) cycleStakesByUser;
     mapping(address => mapping(address => uint256[])) userCycleStakeUpdates;
+
+    struct NodeSeekerTotals {
+        uint256 rank;
+        uint256 attrReactor;
+        uint256 attrCores;
+        uint256 attrDurability;
+        uint256 attrSensors;
+        uint256 attrStorage;
+        uint256 attrChip;
+        uint256 stakingCapacity;
+    }
+
+    mapping(address => NodeSeekerTotals) seekerTotalsByNode;
+
+    mapping(address => mapping(address => uint256)) seekerRankTotalsByUser;
 
     function initialize(IProtocolTimeManager _protocolTimeManager) external initializer {
         Ownable2StepUpgradeable.__Ownable2Step_init();
@@ -66,12 +78,26 @@ contract StakingOrchestrator is
         protocolTimeManager = _protocolTimeManager;
     }
 
-    function getDirectoryStake(address node) external returns (uint256) {
-        return 0;
+    function getNodeStake(address node) external returns (uint256) {
+        uint256 seekerBonusAdjustedStake = seekerBonusAdjustedStakeByNode[node];
+        uint256 maximumNodeStakingCapacity = seekerTotalsByNode[node].stakingCapacity;
+
+        if (maximumNodeStakingCapacity > seekerBonusAdjustedStake) {
+            return seekerBonusAdjustedStake;
+        } else {
+            return
+                maximumNodeStakingCapacity +
+                (seekerBonusAdjustedStake - maximumNodeStakingCapacity) /
+                capacityPenaltyFactor;
+        }
+    }
+
+    function getUserStake(address node, address user) external returns (uint256) {
+        return userStakes[node][user].seekerBonusAdjustedStake;
     }
 
     function getRewardCycleStakeByNode(uint256 cycle, address node) external returns (uint256) {
-        return 0;
+        return cycleStakesByNode[node][cycle];
     }
 
     function getRewardCycleStakeByUser(
@@ -79,11 +105,7 @@ contract StakingOrchestrator is
         address node,
         address user
     ) external returns (uint256) {
-        return 0;
-    }
-
-    function getNodeStake(uint256 cycle, address node) external returns (uint256) {
-        return 0;
+        return cycleStakesByUser[node][user][cycle].cycleAdjustedRewardStake;
     }
 
     function getUserStake(uint256 cycle, address node, address user) external returns (uint256) {
@@ -101,19 +123,95 @@ contract StakingOrchestrator is
         // capacity
         updateUserStakingCapacity(node, user);
 
+        userStakes[node][user].stake += amount;
+
+        processIncreaseInUserSeekerBonusAdjustedStake(node, user);
+    }
+
+    function syloStakeRemoved(address node, address user, uint256 amount) external {
+        // whenever stake changes for a user, we reconsolidate their staking
+        // capacity
+        updateUserStakingCapacity(node, user);
+
+        userStakes[node][user].stake -= amount;
+
+        processDecreaseInUserSeekerBonusAdjustedStake(node, user);
+    }
+
+    function seekerStakeAdded(address node, address user, uint256 seekerId) external {
+        ISeekerStatsOracle.Seeker memory stats = seekerStatsOracle.getSeekerStats(seekerId);
+
+        NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
+        nodeSeekerTotals.rank += stats.rank;
+        nodeSeekerTotals.attrReactor += stats.attrReactor;
+        nodeSeekerTotals.attrCores += stats.attrCores;
+        nodeSeekerTotals.attrDurability += stats.attrDurability;
+        nodeSeekerTotals.attrSensors += stats.attrSensors;
+        nodeSeekerTotals.attrStorage += stats.attrStorage;
+        nodeSeekerTotals.attrChip += stats.attrChip;
+
+        updateNodeStakingCapacity(node);
+
+        seekerRankTotalsByUser[node][user] += stats.rank;
+
+        updateUserStakingCapacity(node, user);
+
+        processIncreaseInUserSeekerBonusAdjustedStake(node, user);
+    }
+
+    function seekerStakeRemoved(address node, address user, uint256 seekerId) external {
+        ISeekerStatsOracle.Seeker memory stats = seekerStatsOracle.getSeekerStats(seekerId);
+
+        NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
+        nodeSeekerTotals.rank -= stats.rank;
+        nodeSeekerTotals.attrReactor -= stats.attrReactor;
+        nodeSeekerTotals.attrCores -= stats.attrCores;
+        nodeSeekerTotals.attrDurability -= stats.attrDurability;
+        nodeSeekerTotals.attrSensors -= stats.attrSensors;
+        nodeSeekerTotals.attrStorage -= stats.attrStorage;
+        nodeSeekerTotals.attrChip -= stats.attrChip;
+
+        updateNodeStakingCapacity(node);
+
+        seekerRankTotalsByUser[node][user] -= stats.rank;
+
+        updateUserStakingCapacity(node, user);
+
+        processDecreaseInUserSeekerBonusAdjustedStake(node, user);
+    }
+
+    function updateNodeStakingCapacity(address node) internal {
+        NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
+
+        int256 coverage = seekerStatsOracle.calculateAttributeCoverage(
+            nodeSeekerTotals.attrReactor,
+            nodeSeekerTotals.attrCores,
+            nodeSeekerTotals.attrDurability,
+            nodeSeekerTotals.attrSensors,
+            nodeSeekerTotals.attrStorage,
+            nodeSeekerTotals.attrChip
+        );
+
+        nodeSeekerTotals.stakingCapacity =
+            SafeCast.toUint256(coverage) *
+            capacityCoverageMultiplier;
+    }
+
+    function updateUserStakingCapacity(address node, address user) internal {
+        NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
+
+        userStakes[node][user].stakingCapacity =
+            (seekerRankTotalsByUser[node][user] * nodeSeekerTotals.stakingCapacity) /
+            nodeSeekerTotals.rank;
+    }
+
+    function processIncreaseInUserSeekerBonusAdjustedStake(address node, address user) internal {
+        uint256 updatedSeekerBonusAdjustedStake = calculateUserSeekerBonusAdjustedStake(
+            node,
+            user
+        );
+
         UserStake storage userStake = userStakes[node][user];
-
-        userStake.stake += amount;
-
-        uint256 updatedSeekerBonusAdjustedStake = 0;
-        if (userStake.stake > userStake.stakingCapacity) {
-            updatedSeekerBonusAdjustedStake =
-                userStake.stakingCapacity +
-                (userStake.stake - userStake.stakingCapacity) /
-                capacityPenaltyFactor;
-        } else {
-            updatedSeekerBonusAdjustedStake = userStake.stake;
-        }
 
         if (updatedSeekerBonusAdjustedStake > userStake.seekerBonusAdjustedStake) {
             uint256 diff = updatedSeekerBonusAdjustedStake - userStake.seekerBonusAdjustedStake;
@@ -125,24 +223,13 @@ contract StakingOrchestrator is
         }
     }
 
-    function syloStakeRemoved(address node, address user, uint256 amount) external {
-        // whenever stake changes for a user, we reconsolidate their staking
-        // capacity
-        updateUserStakingCapacity(node, user);
+    function processDecreaseInUserSeekerBonusAdjustedStake(address node, address user) internal {
+        uint256 updatedSeekerBonusAdjustedStake = calculateUserSeekerBonusAdjustedStake(
+            node,
+            user
+        );
 
         UserStake storage userStake = userStakes[node][user];
-
-        userStake.stake -= amount;
-
-        uint256 updatedSeekerBonusAdjustedStake = 0;
-        if (userStake.stake > userStake.stakingCapacity) {
-            updatedSeekerBonusAdjustedStake =
-                userStake.stakingCapacity +
-                (userStake.stake - userStake.stakingCapacity) /
-                capacityPenaltyFactor;
-        } else {
-            updatedSeekerBonusAdjustedStake = userStake.stake;
-        }
 
         if (updatedSeekerBonusAdjustedStake < userStake.seekerBonusAdjustedStake) {
             uint256 diff = userStake.seekerBonusAdjustedStake - updatedSeekerBonusAdjustedStake;
@@ -154,19 +241,21 @@ contract StakingOrchestrator is
         }
     }
 
-    function seekerStakeAdded(address node, address user, uint256 seekerId) external {
-        revert("not implemented");
+    function calculateUserSeekerBonusAdjustedStake(
+        address node,
+        address user
+    ) internal returns (uint256) {
+        UserStake storage userStake = userStakes[node][user];
+
+        if (userStake.stake > userStake.stakingCapacity) {
+            return
+                userStake.stakingCapacity +
+                (userStake.stake - userStake.stakingCapacity) /
+                capacityPenaltyFactor;
+        } else {
+            return userStake.stake;
+        }
     }
-
-    function seekerStakeRemoved(address node, address user, uint256 seekerId) external {
-        revert("not implemented");
-    }
-
-    function updateUserStakingCapacity(address node, address user) internal {}
-
-    function calculateUserStakingCapacity(address node, address user) external {}
-
-    function adjustDirectoryStake(address node, address user, uint256 amount) internal {}
 
     function adjustUserCycleStake(
         address node,
