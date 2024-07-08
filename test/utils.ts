@@ -3,6 +3,7 @@ import { SyloContracts } from '../common/contracts';
 import { Address } from 'hardhat-deploy/types';
 import { ProtocolTimeManager } from '../typechain-types';
 import { increaseTo } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
+import { Block } from 'ethers';
 
 export enum signatureTypes {
   main,
@@ -206,6 +207,16 @@ export function getInterfaceId(abi: string[]): string {
   }, '0x00000000');
 
   return interfaceId;
+}
+
+export async function getLatestBlock(): Promise<Block> {
+  const block = await ethers.provider.getBlock('latest');
+
+  if (!block) {
+    throw new Error('failed to get latest block');
+  }
+
+  return block;
 }
 
 export type timeManagerUtilType = {

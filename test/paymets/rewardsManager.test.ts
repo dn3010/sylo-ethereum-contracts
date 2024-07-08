@@ -56,7 +56,7 @@ describe('Rewards Manager', () => {
       rewardsManagerTemp.initialize(ethers.ZeroAddress, ethers.ZeroAddress),
     ).to.be.revertedWithCustomError(
       rewardsManagerTemp,
-      'CannotInitializeEmptyRegistriesAddress',
+      'RegistriesAddressCannotBeNil',
     );
   });
 
@@ -73,7 +73,7 @@ describe('Rewards Manager', () => {
       ),
     ).to.be.revertedWithCustomError(
       rewardsManagerTemp,
-      'CannotInitializeEmptyTicketingAddress',
+      'TicketingAddressCannotBeNil',
     );
   });
 
