@@ -34,9 +34,6 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
     int256 private coverageAngle =
         Trigonometry.sin(((Trigonometry.TWO_PI / 6) + Trigonometry.TWO_PI));
 
-    int256 public coverageAnglePub =
-        Trigonometry.sin(Trigonometry.TWO_PI / 6);
-
     event SeekerStatsUpdated(
         uint256 indexed seekerId,
         uint256 attrReactor,

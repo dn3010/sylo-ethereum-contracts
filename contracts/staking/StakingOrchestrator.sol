@@ -2,6 +2,7 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
@@ -11,19 +12,28 @@ import "./IStakingOrchestrator.sol";
 import "../IProtocolTimeManager.sol";
 import "./seekers/ISeekerStatsOracle.sol";
 
-contract StakingOrchestrator is
-    IStakingOrchestrator,
-    Initializable,
-    Ownable2StepUpgradeable,
-    ERC165
-{
+import "hardhat/console.sol";
+
+contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessControl {
+    /**
+     * @notice The only staking manger role given to the sylo and seeker staking
+     * manager contracts. The staking manager contracts are responsible for
+     * informing the orchestrator of when a user's sylo or seeker stake changes.
+     */
+    bytes32 public constant onlyStakingManager = keccak256("ONLY_STAKING_MANAGER");
+
+    /**
+     * @notice Standard only owner role access.
+     */
+    bytes32 public constant onlyOwner = keccak256("ONLY_OWNER");
+
     IProtocolTimeManager public protocolTimeManager;
 
     ISeekerStatsOracle public seekerStatsOracle;
 
-    uint256 capacityCoverageMultiplier;
+    uint256 public capacityCoverageMultiplier;
 
-    uint256 capacityPenaltyFactor;
+    uint256 public capacityPenaltyFactor;
 
     struct UserStake {
         uint256 stake;
@@ -52,10 +62,15 @@ contract StakingOrchestrator is
         uint256 amount;
     }
 
-    mapping(address => mapping(uint256 => uint256)) cycleStakesByNode;
+    struct NodeCycleStake {
+        // we need this flag to know if the node's stake was updated this cycle
+        bool isUpdated;
+        uint256 amount;
+    }
+
+    mapping(address => mapping(uint256 => NodeCycleStake)) cycleStakesByNode;
 
     mapping(address => mapping(address => mapping(uint256 => UserCycleStake))) cycleStakesByUser;
-    mapping(address => mapping(address => uint256[])) userCycleStakeUpdates;
 
     struct NodeSeekerTotals {
         uint256 rank;
@@ -72,13 +87,35 @@ contract StakingOrchestrator is
 
     mapping(address => mapping(address => uint256)) seekerRankTotalsByUser;
 
-    function initialize(IProtocolTimeManager _protocolTimeManager) external initializer {
-        Ownable2StepUpgradeable.__Ownable2Step_init();
-
+    function initialize(
+        IProtocolTimeManager _protocolTimeManager,
+        ISeekerStatsOracle _seekerStatsOracle,
+        uint256 _capacityCoverageMultiplier,
+        uint256 _capacityPenaltyFactor
+    ) external initializer {
         protocolTimeManager = _protocolTimeManager;
+        seekerStatsOracle = _seekerStatsOracle;
+
+        capacityCoverageMultiplier = _capacityCoverageMultiplier;
+        capacityPenaltyFactor = _capacityPenaltyFactor;
+
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(onlyOwner, msg.sender);
     }
 
-    function getNodeStake(address node) external returns (uint256) {
+    function setCapacityCoverageMultiplier(
+        uint256 _capacityCoverageMultiplier
+    ) external onlyRole(onlyOwner) {
+        capacityCoverageMultiplier = _capacityCoverageMultiplier;
+    }
+
+    function setCapacityPenaltyFactor(
+        uint256 _capacityPenaltyFactor
+    ) external onlyRole(onlyOwner) {
+        capacityPenaltyFactor = _capacityPenaltyFactor;
+    }
+
+    function getNodeStake(address node) external view returns (uint256) {
         uint256 seekerBonusAdjustedStake = seekerBonusAdjustedStakeByNode[node];
         uint256 maximumNodeStakingCapacity = seekerTotalsByNode[node].stakingCapacity;
 
@@ -92,33 +129,101 @@ contract StakingOrchestrator is
         }
     }
 
-    function getUserStake(address node, address user) external returns (uint256) {
+    function getUserStake(address node, address user) external view returns (uint256) {
         return userStakes[node][user].seekerBonusAdjustedStake;
     }
 
-    function getRewardCycleStakeByNode(uint256 cycle, address node) external returns (uint256) {
-        return cycleStakesByNode[node][cycle];
+    function getRewardCycleStakeByNode(
+        uint256 cycle,
+        address node
+    ) external view returns (uint256) {
+        return _getRewardCycleStakeByNode(cycle, node);
+    }
+
+    function _getRewardCycleStakeByNode(
+        uint256 cycle,
+        address node
+    ) internal view returns (uint256) {
+        if (cycle == 0) {
+            return 0;
+        }
+
+        IProtocolTimeManager.Cycle memory currentCycle = protocolTimeManager.getCurrentCycle();
+
+        if (cycleStakesByNode[node][cycle].isUpdated) {
+            return cycleStakesByNode[node][cycle].amount;
+        }
+
+        uint256 lastUpdate = 0;
+        for (uint256 i = currentCycle.iteration; i > 0; i--) {
+            if (cycleStakesByNode[node][i].isUpdated) {
+                lastUpdate = i;
+                break;
+            }
+        }
+
+        if (lastUpdate < cycle) {
+            return seekerBonusAdjustedStakeByNode[node];
+        }
+
+        uint256 cycleRewardStake = 0;
+
+        for (uint256 i = cycle - 1; i > 0; --i) {
+            if (cycleStakesByNode[node][i].isUpdated) {
+                cycleRewardStake = cycleStakesByNode[node][i].amount;
+                break;
+            }
+        }
+
+        return cycleRewardStake;
     }
 
     function getRewardCycleStakeByUser(
         uint256 cycle,
         address node,
         address user
-    ) external returns (uint256) {
-        return cycleStakesByUser[node][user][cycle].cycleAdjustedRewardStake;
+    ) external view returns (uint256) {
+        return _getRewardCycleStakeByUser(cycle, node, user);
     }
 
-    function getUserStake(uint256 cycle, address node, address user) external returns (uint256) {
-        revert("not implemented");
+    function _getRewardCycleStakeByUser(
+        uint256 cycle,
+        address node,
+        address user
+    ) internal view returns (uint256) {
+        if (cycle == 0) {
+            return 0;
+        }
+
+        // the user updated their stake for the cycle to query, so we use
+        // that cycle's adjusted rewarded stake
+        if (cycleStakesByUser[node][user][cycle].cycle > 0) {
+            return cycleStakesByUser[node][user][cycle].cycleAdjustedRewardStake;
+        }
+
+        uint256 cycleRewardStake = 0;
+
+        // if the user has not updated their stake for the cycle to query, then we
+        // need to work backwards to determine when the user last updated
+        // their stake, and use the user's total stake for that cycle to determine
+        // the current cycle's stake
+        for (uint256 i = cycle - 1; i > 0; --i) {
+            UserCycleStake storage userCycleStake = cycleStakesByUser[node][user][i];
+            // we have the most previous cycle where the user updated their stake
+            if (userCycleStake.cycle > 0) {
+                cycleRewardStake = userCycleStake.totalStake;
+                break;
+            }
+        }
+
+        return cycleRewardStake;
     }
 
-    function getCurrentNodeStake(address node) external view returns (uint256) {}
-
-    function getCurrentUserStake(address node, address user) external returns (uint256) {
-        revert("not implemented");
-    }
-
-    function syloStakeAdded(address node, address user, uint256 amount) external {
+    function syloStakeAdded(
+        address node,
+        address user,
+        uint256 amount
+    ) external onlyRole(onlyStakingManager) {
         // whenever stake changes for a user, we reconsolidate their staking
         // capacity
         updateUserStakingCapacity(node, user);
@@ -128,7 +233,11 @@ contract StakingOrchestrator is
         processIncreaseInUserSeekerBonusAdjustedStake(node, user);
     }
 
-    function syloStakeRemoved(address node, address user, uint256 amount) external {
+    function syloStakeRemoved(
+        address node,
+        address user,
+        uint256 amount
+    ) external onlyRole(onlyStakingManager) {
         // whenever stake changes for a user, we reconsolidate their staking
         // capacity
         updateUserStakingCapacity(node, user);
@@ -138,7 +247,11 @@ contract StakingOrchestrator is
         processDecreaseInUserSeekerBonusAdjustedStake(node, user);
     }
 
-    function seekerStakeAdded(address node, address user, uint256 seekerId) external {
+    function seekerStakeAdded(
+        address node,
+        address user,
+        uint256 seekerId
+    ) external onlyRole(onlyStakingManager) {
         ISeekerStatsOracle.Seeker memory stats = seekerStatsOracle.getSeekerStats(seekerId);
 
         NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
@@ -159,7 +272,11 @@ contract StakingOrchestrator is
         processIncreaseInUserSeekerBonusAdjustedStake(node, user);
     }
 
-    function seekerStakeRemoved(address node, address user, uint256 seekerId) external {
+    function seekerStakeRemoved(
+        address node,
+        address user,
+        uint256 seekerId
+    ) external onlyRole(onlyStakingManager) {
         ISeekerStatsOracle.Seeker memory stats = seekerStatsOracle.getSeekerStats(seekerId);
 
         NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
@@ -200,9 +317,13 @@ contract StakingOrchestrator is
     function updateUserStakingCapacity(address node, address user) internal {
         NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
 
-        userStakes[node][user].stakingCapacity =
-            (seekerRankTotalsByUser[node][user] * nodeSeekerTotals.stakingCapacity) /
-            nodeSeekerTotals.rank;
+        if (nodeSeekerTotals.stakingCapacity == 0 || nodeSeekerTotals.rank == 0) {
+            userStakes[node][user].stakingCapacity = 0;
+        } else {
+            userStakes[node][user].stakingCapacity =
+                (seekerRankTotalsByUser[node][user] * nodeSeekerTotals.stakingCapacity) /
+                nodeSeekerTotals.rank;
+        }
     }
 
     function processIncreaseInUserSeekerBonusAdjustedStake(address node, address user) internal {
@@ -216,10 +337,10 @@ contract StakingOrchestrator is
         if (updatedSeekerBonusAdjustedStake > userStake.seekerBonusAdjustedStake) {
             uint256 diff = updatedSeekerBonusAdjustedStake - userStake.seekerBonusAdjustedStake;
 
-            seekerBonusAdjustedStakeByNode[node] += diff;
+            userStake.seekerBonusAdjustedStake = updatedSeekerBonusAdjustedStake;
             adjustUserCycleStake(node, user, diff, true);
 
-            userStake.seekerBonusAdjustedStake = updatedSeekerBonusAdjustedStake;
+            seekerBonusAdjustedStakeByNode[node] += diff;
         }
     }
 
@@ -234,17 +355,17 @@ contract StakingOrchestrator is
         if (updatedSeekerBonusAdjustedStake < userStake.seekerBonusAdjustedStake) {
             uint256 diff = userStake.seekerBonusAdjustedStake - updatedSeekerBonusAdjustedStake;
 
-            seekerBonusAdjustedStakeByNode[node] -= diff;
+            userStake.seekerBonusAdjustedStake = updatedSeekerBonusAdjustedStake;
             adjustUserCycleStake(node, user, diff, false);
 
-            userStake.seekerBonusAdjustedStake = updatedSeekerBonusAdjustedStake;
+            seekerBonusAdjustedStakeByNode[node] -= diff;
         }
     }
 
     function calculateUserSeekerBonusAdjustedStake(
         address node,
         address user
-    ) internal returns (uint256) {
+    ) internal view returns (uint256) {
         UserStake storage userStake = userStakes[node][user];
 
         if (userStake.stake > userStake.stakingCapacity) {
@@ -263,10 +384,47 @@ contract StakingOrchestrator is
         uint256 amount,
         bool isIncrease
     ) internal {
-        // update the node's directory stake
-        // directoryStakes[node] += amount;
+        IProtocolTimeManager.Cycle memory cycle = IProtocolTimeManager.Cycle(0, 0, 0);
+        uint256 timestamp = block.timestamp;
+        uint256 protocolStart = protocolTimeManager.getStart();
+        if (protocolStart > block.timestamp) {
+            cycle.iteration = 1;
+            cycle.start = protocolStart;
+            // duration just needs to be non-zero to prevent division by zero
+            cycle.duration = 1;
+            timestamp = 0;
+        } else {
+            cycle = protocolTimeManager.getCurrentCycle();
+        }
 
-        IProtocolTimeManager.Cycle memory cycle = protocolTimeManager.getCurrentCycle();
+        NodeCycleStake storage nodeCycleStake = cycleStakesByNode[node][cycle.iteration];
+
+        // first time the node's stake is being updated this cycle
+        if (!nodeCycleStake.isUpdated) {
+            nodeCycleStake.isUpdated = true;
+
+            // we set the initial cycle stake amount to the node's
+            // seeker bonus adjusted stake (before cycle adjustment)
+            nodeCycleStake.amount = seekerBonusAdjustedStakeByNode[node];
+
+            // If there are cycles where the node's stake has not been updated,
+            // we have to backfill the cycle immediately after the last cycle
+            // it was updated. This is to ensure the `getRewardCycleStakeByNode`
+            // calculation remains accurate for every cycle as the node's stake changes.
+            for (uint256 i = cycle.iteration - 1; i > 0; --i) {
+                NodeCycleStake storage previousCycleStake = cycleStakesByNode[node][i];
+
+                if (!previousCycleStake.isUpdated) {
+                    if (cycleStakesByNode[node][i - 1].isUpdated) {
+                        previousCycleStake.isUpdated = true;
+                        previousCycleStake.amount = nodeCycleStake.amount;
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
 
         UserCycleStake storage userCycleStake = cycleStakesByUser[node][user][cycle.iteration];
 
@@ -277,7 +435,7 @@ contract StakingOrchestrator is
 
         if (isIncrease) {
             userCycleStake.totalStake += amount;
-            userCycleStake.stakingUpdates.push(UserStakeUpdate(block.timestamp, amount));
+            userCycleStake.stakingUpdates.push(UserStakeUpdate(timestamp, amount));
         } else {
             userCycleStake.totalStake -= amount;
             uint256 stakeToSubtract = amount;
@@ -292,9 +450,7 @@ contract StakingOrchestrator is
                     break;
                 }
 
-                if (i == 0) {
-                    break;
-                }
+                i--;
             }
         }
 
@@ -307,10 +463,10 @@ contract StakingOrchestrator is
         // calculate the difference and update the node's cycle adjusted stake
         if (cycleAdjustedStake >= userCycleStake.cycleAdjustedRewardStake) {
             uint256 diff = cycleAdjustedStake - userCycleStake.cycleAdjustedRewardStake;
-            cycleStakesByNode[node][cycle.iteration] += diff;
+            nodeCycleStake.amount += diff;
         } else {
             uint256 diff = userCycleStake.cycleAdjustedRewardStake - cycleAdjustedStake;
-            cycleStakesByNode[node][cycle.iteration] -= diff;
+            nodeCycleStake.amount -= diff;
         }
 
         userCycleStake.cycleAdjustedRewardStake = cycleAdjustedStake;
@@ -323,38 +479,34 @@ contract StakingOrchestrator is
     ) internal {
         UserCycleStake storage userCycleStake = cycleStakesByUser[node][user][cycle.iteration];
 
+        userCycleStake.totalStake = _getRewardCycleStakeByUser(cycle.iteration, node, user);
+
         userCycleStake.cycle = cycle.iteration;
 
-        uint256 totalStake = 0;
-        uint256[] storage cycleStakeUpdates = userCycleStakeUpdates[node][user];
-        if (cycleStakeUpdates.length > 0) {
-            uint256 lastCycleStakeUpdate = cycleStakeUpdates[cycleStakeUpdates.length - 1];
-            UserCycleStake storage lastCycleStake = cycleStakesByUser[node][user][
-                lastCycleStakeUpdate
-            ];
-            totalStake = lastCycleStake.totalStake;
-        }
-
-        userCycleStake.totalStake = totalStake;
-
         // we also make the first staking update amount equal to the
-        // total stake the user had for the previous cycle
-        userCycleStake.stakingUpdates.push(UserStakeUpdate(cycle.start, totalStake));
+        // user's current total stake
+        userCycleStake.stakingUpdates.push(UserStakeUpdate(0, userCycleStake.totalStake));
 
-        userCycleStakeUpdates[node][user].push(cycle.iteration);
+        userCycleStake.cycleAdjustedRewardStake = calculateCycleAdjustedStake(
+            cycle,
+            userCycleStake.stakingUpdates
+        );
     }
 
     function calculateCycleAdjustedStake(
         IProtocolTimeManager.Cycle memory cycle,
         UserStakeUpdate[] storage updates
-    ) internal returns (uint256) {
+    ) internal view returns (uint256) {
         uint256 totalAdjustedStake = 0;
 
         for (uint256 i = 0; i < updates.length; i++) {
             // for each update, we proportionally adjust the amount based on how
             // far into the cycle the update occurred.
             uint256 amount = updates[i].amount;
-            uint256 elapsed = updates[i].updatedAt - cycle.start;
+            uint256 elapsed = 0;
+            if (updates[i].updatedAt > cycle.start) {
+                elapsed = updates[i].updatedAt - cycle.start;
+            }
             uint256 adjustedAmount = amount - ((elapsed * amount) / cycle.duration);
             totalAdjustedStake += adjustedAmount;
         }

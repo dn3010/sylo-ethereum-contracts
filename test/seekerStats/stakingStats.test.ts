@@ -30,7 +30,7 @@ describe('Seeker Stats', () => {
     await seekerStatsOracle.setOracle(await accounts[19].getAddress());
   });
 
-  it('cannot initialize seeker stats oracle with invalid arguemnts', async () => {
+  it('cannot initialize seeker stats oracle with invalid arguments', async () => {
     const factory = await ethers.getContractFactory('SeekerStatsOracle');
     const seekerStatsOracleTemp = await factory.deploy();
 
@@ -224,7 +224,7 @@ describe('Seeker Stats', () => {
       .withArgs(seeker.seekerId);
   });
 
-  it.only('can calculate coverage from attribute totals', async () => {
+  it('can calculate coverage from attribute totals', async () => {
     const seekerList = await createAndRegisterSeeker(5);
 
     const attributeCoverageExpected = calculateAttributesCoverage(seekerList);
@@ -237,7 +237,6 @@ describe('Seeker Stats', () => {
         attributeCoverageExpected.totalStorage,
         attributeCoverageExpected.totalChip,
       );
-    console.log(attributeCoverageExpected.coverage, attributeCoverage);
     const formatedCoverage = ethers.formatEther(attributeCoverage);
 
     assert.equal(
@@ -252,7 +251,7 @@ describe('Seeker Stats', () => {
       'function createProofMessage((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external pure returns (bytes memory)',
       'function registerSeekerRestricted((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external',
       'function registerSeeker((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker, bytes calldata signature) external',
-      'function calculateAttributeCoverage((uint256,uint256,uint256,uint256,uint256,uint256) external view returns (int256)',
+      'function calculateAttributeCoverage(uint256,uint256,uint256,uint256,uint256,uint256) external view returns (int256)',
       'function isSeekerRegistered((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external view returns (bool)',
       'function getSeekerStats(uint256 seekerId) external view returns ((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) memory)',
     ];
@@ -381,4 +380,20 @@ export function createRandomSeeker(): Seeker {
     attrStorage,
     attrChip,
   );
+}
+
+export async function createAndRegisterSeeker(
+  seekerStatsOracle: SeekerStatsOracle,
+  oracle: Signer,
+): Promise<Seeker> {
+  const seeker = createRandomSeeker();
+
+  const proofMessage = await seekerStatsOracle.createProofMessage(seeker);
+  const signature = await oracle.signMessage(
+    Buffer.from(proofMessage.slice(2), 'hex'),
+  );
+
+  await seekerStatsOracle.registerSeeker(seeker, signature);
+
+  return seeker;
 }

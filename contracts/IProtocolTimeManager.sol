@@ -18,11 +18,11 @@ interface IProtocolTimeManager {
 
     function getPeriodDuration() external returns (uint256);
 
-    function getTime() external returns (uint256, uint256, Cycle memory, uint256);
+    function getTime() external view returns (uint256, uint256, Cycle memory, uint256);
 
-    function getCurrentCycle() external returns (Cycle memory);
+    function getCurrentCycle() external view returns (Cycle memory);
 
-    function getCurrentPeriod() external returns (uint256);
+    function getCurrentPeriod() external view returns (uint256);
 
     function getStart() external view returns (uint256);
 }
