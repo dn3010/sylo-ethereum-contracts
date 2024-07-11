@@ -1,6 +1,6 @@
 import { ethers } from 'hardhat';
 import { Signer } from 'ethers';
-import { deployContracts, timeManagerUtilType } from './utils';
+import { deployContracts, ProtocolTimeManagerUtilities } from './utils';
 import { expect, assert } from 'chai';
 import { SyloContracts } from '../common/contracts';
 import {
@@ -20,7 +20,7 @@ describe('Directory', () => {
   let nodeTwo: Signer;
   let nodeThree: Signer;
 
-  let timeManagerUtil: timeManagerUtilType;
+  let timeManagerUtil: ProtocolTimeManagerUtilities;
 
   beforeEach(async () => {
     contracts = await deployContracts();
@@ -33,6 +33,11 @@ describe('Directory', () => {
     protocolTimeManager = contracts.protocolTimeManager;
 
     timeManagerUtil = getTimeManagerUtil(protocolTimeManager);
+
+    await stakingOrchestator.grantRole(
+      await stakingOrchestator.onlyStakingManager(),
+      accounts[0].getAddress(),
+    );
   });
 
   it('cannot initialize directory more than once', async () => {
@@ -176,11 +181,19 @@ describe('Directory', () => {
 
   it('should be able to scan for previous periods', async () => {
     const { setTimeSinceStart } = await timeManagerUtil.startProtocol();
-    await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
-    await stakingOrchestator.syloStakeAdded(nodeTwo, ethers.ZeroAddress, 1000);
+    await stakingOrchestator.syloStakeAdded(
+      nodeOne,
+      nodeOne.getAddress(),
+      1000,
+    );
+    await stakingOrchestator.syloStakeAdded(
+      nodeTwo,
+      nodeTwo.getAddress(),
+      1000,
+    );
     await stakingOrchestator.syloStakeAdded(
       nodeThree,
-      ethers.ZeroAddress,
+      nodeThree.getAddress(),
       1000,
     );
 
@@ -282,7 +295,7 @@ describe('Directory', () => {
       await stakingOrchestator.syloStakeAdded(
         await accounts[i].getAddress(),
         ethers.ZeroAddress,
-        1,
+        100,
       );
       await directory.connect(accounts[i]).joinNextDirectory();
     }
@@ -417,7 +430,7 @@ describe('Directory', () => {
       await stakingOrchestator.syloStakeAdded(
         await accounts[i].getAddress(),
         ethers.ZeroAddress,
-        1,
+        100,
       );
       await directory.connect(accounts[i]).joinNextDirectory();
     }

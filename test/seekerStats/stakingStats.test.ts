@@ -237,11 +237,10 @@ describe('Seeker Stats', () => {
         attributeCoverageExpected.totalStorage,
         attributeCoverageExpected.totalChip,
       );
-    const formatedCoverage = ethers.formatEther(attributeCoverage);
 
     assert.equal(
-      Number(formatedCoverage).toFixed(0),
-      attributeCoverageExpected.coverage.toFixed(0),
+      attributeCoverage,
+      BigInt(attributeCoverageExpected.coverage.toFixed(0)),
     );
   });
 
@@ -252,7 +251,7 @@ describe('Seeker Stats', () => {
       'function registerSeekerRestricted((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external',
       'function registerSeeker((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker, bytes calldata signature) external',
       'function calculateAttributeCoverage(uint256,uint256,uint256,uint256,uint256,uint256) external view returns (int256)',
-      'function isSeekerRegistered((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) calldata seeker) external view returns (bool)',
+      'function isSeekerRegistered(uint256) external view returns (bool)',
       'function getSeekerStats(uint256 seekerId) external view returns ((uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256) memory)',
     ];
 

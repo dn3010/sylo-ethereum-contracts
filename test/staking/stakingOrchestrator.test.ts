@@ -15,7 +15,7 @@ import {
 } from '../seekerStats/stakingStats.test';
 import { increase } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
-describe.only('Staking Orchestrator', () => {
+describe('Staking Orchestrator', () => {
   let accounts: Signer[];
   let contracts: SyloContracts;
   let stakingOrchestrator: StakingOrchestrator;
