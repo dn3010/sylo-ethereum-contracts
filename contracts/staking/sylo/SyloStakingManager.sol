@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 
 import "../../SyloToken.sol";
+import "../IStakingOrchestrator.sol";
 import "./ISyloStakingManager.sol";
 
 contract SyloStakingManager is
@@ -16,6 +17,9 @@ contract SyloStakingManager is
 {
     /** IERC20 Sylo Token address */
     IERC20 public _syloToken;
+
+    /** Staking Orchestrator address */
+    IStakingOrchestrator public _stakingOrchestrator;
 
     /**
      * @notice Tracks the managed stake for every Node.
@@ -52,14 +56,16 @@ contract SyloStakingManager is
     error CannotTransferMoreThanStaked(uint256 stakeAmount, uint256 transferAmount);
     error StakeNotYetUnlocked();
 
-    function initialize(IERC20 syloToken, uint256 _unlockDuration) external initializer {
+    function initialize(IERC20 syloToken, IStakingOrchestrator stakingOrchestrator, uint256 _unlockDuration) external initializer {
         if (address(syloToken) == address(0)) {
             revert SyloAddressCannotBeNil();
         }
 
+
         Ownable2StepUpgradeable.__Ownable2Step_init();
 
         _syloToken = syloToken;
+        _stakingOrchestrator = stakingOrchestrator;
 
         _setUnlockDuration(_unlockDuration);
     }
@@ -120,6 +126,9 @@ contract SyloStakingManager is
 
         // update total managed stake for this node
         stakes[node].totalManagedStake += amount;
+
+        // report to staking orchestrator
+        _stakingOrchestrator.syloStakeAdded(node, msg.sender, amount);
     }
 
     /**
@@ -158,6 +167,9 @@ contract SyloStakingManager is
 
         // update total stake managed by this contract
         totalManagedStake -= amount;
+
+        // report to staking orchestrator
+        _stakingOrchestrator.syloStakeRemoved(node, msg.sender, amount);
 
         // update unlocking
         Unlocking storage unlocking = unlockings[node][msg.sender];

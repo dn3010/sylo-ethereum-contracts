@@ -39,9 +39,7 @@ describe('Staking Orchestrator', () => {
       accounts[0].getAddress(),
     );
 
-    timeManagerUtilities = await getTimeManagerUtil(
-      contracts.protocolTimeManager,
-    );
+    timeManagerUtilities = getTimeManagerUtil(contracts.protocolTimeManager);
     startProtocol = timeManagerUtilities.startProtocol;
 
     node = await accounts[9].getAddress();
@@ -562,7 +560,7 @@ describe('Staking Orchestrator', () => {
     });
   });
 
-  describe('Tests seeker staking', async () => {
+  describe('Tests seeker staking', () => {
     it('can add seeker stakes to increase capacity', async () => {
       const seekers = await Promise.all(
         Array(5)
@@ -970,7 +968,7 @@ describe('Staking Orchestrator', () => {
     user: string,
     expectedAmount: BigNumberish,
   ) {
-    await expect(await stakingOrchestrator.getUserStake(node, user)).to.equal(
+    expect(await stakingOrchestrator.getUserStake(node, user)).to.equal(
       expectedAmount,
     );
   }
@@ -981,7 +979,7 @@ describe('Staking Orchestrator', () => {
     user: string,
     expectedAmount: BigNumberish,
   ) {
-    await expect(
+    expect(
       await stakingOrchestrator.getRewardCycleStakeByUser(cycle, node, user),
     ).to.equal(expectedAmount);
   }

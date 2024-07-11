@@ -7,7 +7,7 @@ import {
 import { SyloContracts } from '../../common/contracts';
 import { Signer } from 'ethers';
 import { expect, assert } from 'chai';
-import { deployContracts } from '../utils';
+import { deployContracts, getTimeManagerUtil } from '../utils';
 import { getInterfaceId } from '../utils';
 import { createRandomSeeker } from '../seekerStats/stakingStats.test';
 
@@ -44,6 +44,9 @@ describe('Seeker Staking Manager', () => {
 
     oracleAccount = accounts[19];
     await seekerStatsOracle.setOracle(await accounts[19].getAddress());
+
+    const { startProtocol } = getTimeManagerUtil(contracts.protocolTimeManager);
+    await startProtocol();
   });
 
   it('cannot initialize seeker staking manager with invalid arguemnts', async () => {
@@ -52,6 +55,7 @@ describe('Seeker Staking Manager', () => {
 
     await expect(
       seekerStakingManagerTemp.initialize(
+        ethers.ZeroAddress,
         ethers.ZeroAddress,
         ethers.ZeroAddress,
       ),
@@ -63,6 +67,7 @@ describe('Seeker Staking Manager', () => {
     await expect(
       seekerStakingManagerTemp.initialize(
         await testSeekers.getAddress(),
+        ethers.ZeroAddress,
         ethers.ZeroAddress,
       ),
     ).to.be.revertedWithCustomError(
@@ -76,6 +81,7 @@ describe('Seeker Staking Manager', () => {
       seekerStakingManager.initialize(
         await testSeekers.getAddress(),
         await seekerStatsOracle.getAddress(),
+        ethers.ZeroAddress,
       ),
     ).to.be.revertedWith('Initializable: contract is already initialized');
   });
