@@ -62,6 +62,13 @@ contract Registries is IRegistries, Initializable, Ownable2StepUpgradeable, ERC1
     }
 
     /**
+     * @notice Returns the default payout percentage parameter.
+     */
+    function getDefaultPayoutPercentage() external view returns (uint32) {
+        return defaultPayoutPercentage;
+    }
+
+    /**
      * @notice Set the global default payout percentage value. Only callable
      * by the owner.
      * @param _defaultPayoutPercentage The payout percentage as a value where the
