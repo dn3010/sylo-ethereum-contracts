@@ -4,17 +4,14 @@ import {
   MAX_SYLO,
   ProtocolTimeManagerUtilities,
   deployContracts,
-  getInterfaceId,
   getTimeManagerUtil,
 } from '../utils';
 import { BigNumberish, Signer } from 'ethers';
 import { expect } from 'chai';
-import { StakingOrchestrator, SyloStakingManager } from '../../typechain-types';
-import * as hardhatHelper from '@nomicfoundation/hardhat-network-helpers';
+import { StakingOrchestrator } from '../../typechain-types';
 import {
   Seeker,
   createAndRegisterSeeker,
-  createRandomSeeker,
 } from '../seekerStats/stakingStats.test';
 import { increase } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
@@ -30,8 +27,6 @@ describe.only('Staking Orchestrator', () => {
 
   let coverageMultiplier: bigint;
   let penaltyFactor: bigint;
-
-  let startP;
 
   beforeEach(async () => {
     accounts = await ethers.getSigners();
@@ -55,6 +50,91 @@ describe.only('Staking Orchestrator', () => {
 
     coverageMultiplier = await stakingOrchestrator.capacityCoverageMultiplier();
     penaltyFactor = await stakingOrchestrator.capacityPenaltyFactor();
+  });
+
+  it('cannot initialize staking orchestrator more than once', async () => {
+    await expect(
+      stakingOrchestrator.initialize(
+        contracts.protocolTimeManager.getAddress(),
+        contracts.seekerStatsOracle.getAddress(),
+        1,
+        1,
+      ),
+    ).to.be.revertedWith('Initializable: contract is already initialized');
+  });
+
+  it('can set capacity coverage multiplier', async () => {
+    await expect(stakingOrchestrator.setCapacityCoverageMultiplier(333n))
+      .to.emit(stakingOrchestrator, 'CapacityCoverageMultiplierUpdated')
+      .withArgs(333n);
+  });
+
+  it('can set capacity penalty factor', async () => {
+    await expect(stakingOrchestrator.setCapacityPenaltyFactor(333n))
+      .to.emit(stakingOrchestrator, 'CapacityPenaltyFactorUpdated')
+      .withArgs(333n);
+  });
+
+  it('cannot set capacity coverage multipler as non-owner role', async () => {
+    await expect(
+      stakingOrchestrator.connect(accounts[1]).setCapacityCoverageMultiplier(1),
+    ).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[1].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        (await stakingOrchestrator.onlyOwner()),
+    );
+  });
+
+  it('cannot set capacity coverage multipler as non-owner role', async () => {
+    await expect(
+      stakingOrchestrator.connect(accounts[1]).setCapacityPenaltyFactor(1),
+    ).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[1].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        (await stakingOrchestrator.onlyOwner()),
+    );
+  });
+
+  it('cannot update sylo stake as non-owner staking manager role', async () => {
+    await expect(
+      stakingOrchestrator.connect(accounts[1]).syloStakeAdded(node, user, 1),
+    ).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[1].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        (await stakingOrchestrator.onlyStakingManager()),
+    );
+
+    await expect(
+      stakingOrchestrator.connect(accounts[1]).syloStakeRemoved(node, user, 1),
+    ).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[1].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        (await stakingOrchestrator.onlyStakingManager()),
+    );
+
+    await expect(
+      stakingOrchestrator.connect(accounts[1]).seekerStakeAdded(node, user, 1),
+    ).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[1].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        (await stakingOrchestrator.onlyStakingManager()),
+    );
+
+    await expect(
+      stakingOrchestrator
+        .connect(accounts[1])
+        .seekerStakeRemoved(node, user, 1),
+    ).to.be.revertedWith(
+      'AccessControl: account ' +
+        (await accounts[1].getAddress()).toLowerCase() +
+        ' is missing role ' +
+        (await stakingOrchestrator.onlyStakingManager()),
+    );
   });
 
   /**

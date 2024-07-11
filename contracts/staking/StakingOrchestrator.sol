@@ -87,6 +87,9 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
 
     mapping(address => mapping(address => uint256)) seekerRankTotalsByUser;
 
+    event CapacityCoverageMultiplierUpdated(uint256 capacityCoverageMultiplier);
+    event CapacityPenaltyFactorUpdated(uint256 capacityPenaltyFactor);
+
     function initialize(
         IProtocolTimeManager _protocolTimeManager,
         ISeekerStatsOracle _seekerStatsOracle,
@@ -107,12 +110,14 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         uint256 _capacityCoverageMultiplier
     ) external onlyRole(onlyOwner) {
         capacityCoverageMultiplier = _capacityCoverageMultiplier;
+        emit CapacityCoverageMultiplierUpdated(capacityCoverageMultiplier);
     }
 
     function setCapacityPenaltyFactor(
         uint256 _capacityPenaltyFactor
     ) external onlyRole(onlyOwner) {
         capacityPenaltyFactor = _capacityPenaltyFactor;
+        emit CapacityPenaltyFactorUpdated(capacityPenaltyFactor);
     }
 
     function getStakingCapacityByNode(address node) external view returns (uint256) {
@@ -325,7 +330,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
     function updateUserStakingCapacity(address node, address user) internal {
         NodeSeekerTotals storage nodeSeekerTotals = seekerTotalsByNode[node];
 
-        if (nodeSeekerTotals.stakingCapacity == 0 || nodeSeekerTotals.rank == 0) {
+        if (nodeSeekerTotals.stakingCapacity == 0) {
             userStakes[node][user].stakingCapacity = 0;
         } else {
             userStakes[node][user].stakingCapacity =
