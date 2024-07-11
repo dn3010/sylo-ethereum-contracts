@@ -115,6 +115,14 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         capacityPenaltyFactor = _capacityPenaltyFactor;
     }
 
+    function getStakingCapacityByNode(address node) external view returns (uint256) {
+        return seekerTotalsByNode[node].stakingCapacity;
+    }
+
+    function getStakingCapacityByUser(address node, address user) external view returns (uint256) {
+        return userStakes[node][user].stakingCapacity;
+    }
+
     function getNodeStake(address node) external view returns (uint256) {
         uint256 seekerBonusAdjustedStake = seekerBonusAdjustedStakeByNode[node];
         uint256 maximumNodeStakingCapacity = seekerTotalsByNode[node].stakingCapacity;
@@ -507,6 +515,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
             if (updates[i].updatedAt > cycle.start) {
                 elapsed = updates[i].updatedAt - cycle.start;
             }
+
             uint256 adjustedAmount = amount - ((elapsed * amount) / cycle.duration);
             totalAdjustedStake += adjustedAmount;
         }

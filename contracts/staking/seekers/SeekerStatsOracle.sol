@@ -207,7 +207,10 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
         coverage += int256(attrStorage) * int256(attrChip);
         coverage += int256(attrChip) * int256(attrReactor);
 
-        return coverage * coverageAngle / 2;
+        int256 area = coverage * coverageAngle / 2;
+
+        // the coverage angle is scaled by 1e18, so we scale it back
+        return area / 1e18;
     }
 
     /**

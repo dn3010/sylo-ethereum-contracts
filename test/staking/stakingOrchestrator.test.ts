@@ -12,6 +12,7 @@ import { expect } from 'chai';
 import { StakingOrchestrator, SyloStakingManager } from '../../typechain-types';
 import * as hardhatHelper from '@nomicfoundation/hardhat-network-helpers';
 import {
+  Seeker,
   createAndRegisterSeeker,
   createRandomSeeker,
 } from '../seekerStats/stakingStats.test';
@@ -56,61 +57,13 @@ describe.only('Staking Orchestrator', () => {
     penaltyFactor = await stakingOrchestrator.capacityPenaltyFactor();
   });
 
-  it("can increase a user's sylo stake at the start of the cycle", async () => {
-    await startProtocol();
-
-    const stakeAmount = 100n;
-
-    await stakingOrchestrator.syloStakeAdded(node, user, stakeAmount);
-
-    // with no staking capacity, the user's stake should divided by the penalty
-    // factor
-    const userStake = await stakingOrchestrator.getUserStake(node, user);
-    expect(userStake).to.equal(stakeAmount / penaltyFactor);
-
-    // the node's stake should be equal to the sum of the user stake, but with
-    // no staking capacity, the node's stake should penalized as well.
-    const nodeStake = await stakingOrchestrator.getNodeStake(node);
-    expect(nodeStake).to.equal(userStake / penaltyFactor);
-
-    // the user's stake was added at the beginning of the cycle, so reward
-    // cycle stakes should be equal to the current user stake
-
-    expect(
-      await stakingOrchestrator.getRewardCycleStakeByUser(1, node, user),
-    ).to.equal(userStake);
-
-    // the reward cycle node stake should equal the sum of reward cycle
-    // user stakes
-    expect(
-      await stakingOrchestrator.getRewardCycleStakeByNode(1, node),
-    ).to.equal(userStake);
-  });
-
-  it("can decrease a user's stake at the start of the cycle", async () => {
-    const { startProtocol } = timeManagerUtilities;
-
-    await startProtocol();
-
-    const stakeAmount = 100n;
-
-    await stakingOrchestrator.syloStakeAdded(node, user, stakeAmount);
-
-    const userStakeBeforeDecrease = await stakingOrchestrator.getUserStake(
-      node,
-      user,
-    );
-
-    await stakingOrchestrator.syloStakeRemoved(node, user, 50n);
-
-    // the user's stake should proportionally decrease
-    const decreaseFactor = stakeAmount / (stakeAmount - 50n);
-    expect(await stakingOrchestrator.getUserStake(node, user)).to.equal(
-      userStakeBeforeDecrease / decreaseFactor,
-    );
-  });
-
-  describe('Staking with sufficient capacity', () => {
+  /**
+   * These tests focus on adding and removing stake, and confirming the
+   * reward cycle staking values are accurate. For simplicity, we set the
+   * node's and user's seeker staking capacity to maximum values, so that
+   * the seeker stake does not impact the sylo stake.
+   */
+  describe('Tests staking with sufficient capacity', () => {
     beforeEach(async () => {
       await setMaximumStakingCapacity(node, user);
     });
@@ -123,7 +76,7 @@ describe.only('Staking Orchestrator', () => {
       await stakingOrchestrator.syloStakeAdded(node, user, stakeAmount);
 
       await checkUserStake(node, user, stakeAmount);
-      await checkRewardCycleUserStake(1, node, user, stakeAmount);
+      await checkUserRewardCycleStake(1, node, user, stakeAmount);
     });
 
     it("can decrease a user's stake at the start of the cycle", async () => {
@@ -136,7 +89,7 @@ describe.only('Staking Orchestrator', () => {
       await stakingOrchestrator.syloStakeRemoved(node, user, 50n);
 
       await checkUserStake(node, user, stakeAmount - 50n);
-      await checkRewardCycleUserStake(1, node, user, stakeAmount - 50n);
+      await checkUserRewardCycleStake(1, node, user, stakeAmount - 50n);
     });
 
     it("can increase a user's stake midway through the cycle", async () => {
@@ -155,7 +108,7 @@ describe.only('Staking Orchestrator', () => {
       // Reward cycle stake is adjusted based on when the stake was added.
       // So as the stake was added half way through the cycle, only half of the
       // added stake (100 * 50%) is considered
-      await checkRewardCycleUserStake(1, node, user, 150n);
+      await checkUserRewardCycleStake(1, node, user, 150n);
     });
 
     it("can increase a user's stake multiple times throughout the cycle", async () => {
@@ -189,7 +142,7 @@ describe.only('Staking Orchestrator', () => {
       }
 
       await checkUserStake(node, user, expectedUserStake);
-      await checkRewardCycleUserStake(1, node, user, expectedRewardCycleStake);
+      await checkUserRewardCycleStake(1, node, user, expectedRewardCycleStake);
     });
 
     it('calculates reward cycle stake correctly when stake is decreased multiple times throughout cycle', async () => {
@@ -210,7 +163,7 @@ describe.only('Staking Orchestrator', () => {
 
       let expectedRewardCycleStake = stakeAmount - 33n;
       await checkUserStake(node, user, expectedRewardCycleStake);
-      await checkRewardCycleUserStake(1, node, user, expectedRewardCycleStake);
+      await checkUserRewardCycleStake(1, node, user, expectedRewardCycleStake);
 
       // progress 50% through the cycle
       await setTimeSinceStart(500);
@@ -219,7 +172,7 @@ describe.only('Staking Orchestrator', () => {
 
       expectedRewardCycleStake = expectedRewardCycleStake - 24n;
       await checkUserStake(node, user, expectedRewardCycleStake);
-      await checkRewardCycleUserStake(1, node, user, expectedRewardCycleStake);
+      await checkUserRewardCycleStake(1, node, user, expectedRewardCycleStake);
 
       // progress 80% through the cycle
       await setTimeSinceStart(800);
@@ -228,7 +181,7 @@ describe.only('Staking Orchestrator', () => {
 
       expectedRewardCycleStake = expectedRewardCycleStake - 11n;
       await checkUserStake(node, user, expectedRewardCycleStake);
-      await checkRewardCycleUserStake(1, node, user, expectedRewardCycleStake);
+      await checkUserRewardCycleStake(1, node, user, expectedRewardCycleStake);
     });
 
     it('can increase and decrease user stake multiple times and follow FIFO principles', async () => {
@@ -242,7 +195,7 @@ describe.only('Staking Orchestrator', () => {
       await stakingOrchestrator.syloStakeAdded(node, user, 100n);
 
       await checkUserStake(node, user, 200n);
-      await checkRewardCycleUserStake(1, node, user, 180n);
+      await checkUserRewardCycleStake(1, node, user, 180n);
 
       // decrease stake (should decrease from second addition)
       await stakingOrchestrator.syloStakeRemoved(node, user, 80n);
@@ -257,7 +210,7 @@ describe.only('Staking Orchestrator', () => {
       //   * 100 stake added at 100%: 100 * 100% = 100
       //   * 20 stake added at 80%: 20 * 80% = 16
       //   total = 100 + 16 = 116
-      await checkRewardCycleUserStake(1, node, user, 116n);
+      await checkUserRewardCycleStake(1, node, user, 116n);
 
       // decrease more stake such that is subtracts from the first addition
       await stakingOrchestrator.syloStakeRemoved(node, user, 25n);
@@ -270,7 +223,7 @@ describe.only('Staking Orchestrator', () => {
       // is applied to the first addition.
       //   * 95 stake added at 100%: 95 * 100% = 95
       //   total = 95
-      await checkRewardCycleUserStake(1, node, user, 95n);
+      await checkUserRewardCycleStake(1, node, user, 95n);
 
       // progress 50% throughout the cycle
       await setTimeSinceStart(500);
@@ -280,7 +233,7 @@ describe.only('Staking Orchestrator', () => {
       await checkUserStake(node, user, 195n);
 
       // we add 50 to the previous reward cycle stake (50% of 100)
-      await checkRewardCycleUserStake(1, node, user, 145n);
+      await checkUserRewardCycleStake(1, node, user, 145n);
 
       // progress 75% throughout the cycle
       await setTimeSinceStart(750);
@@ -290,21 +243,21 @@ describe.only('Staking Orchestrator', () => {
       await checkUserStake(node, user, 295n);
 
       // we add 25 to the previous reward cycle stake (25% of 100)
-      await checkRewardCycleUserStake(1, node, user, 170n);
+      await checkUserRewardCycleStake(1, node, user, 170n);
 
       // we decrease the stake by 150, which should wipe out the
       // previous addition, and subtract another 50 from the second addition
       await stakingOrchestrator.syloStakeRemoved(node, user, 150n);
 
       await checkUserStake(node, user, 145n);
-      await checkRewardCycleUserStake(1, node, user, 120n);
+      await checkUserRewardCycleStake(1, node, user, 120n);
 
       // we decrease the stake by 75, which should wipe out the remainder of
       // the second addition, and subtract 25 from the first addition
       await stakingOrchestrator.syloStakeRemoved(node, user, 75n);
 
       await checkUserStake(node, user, 70n);
-      await checkRewardCycleUserStake(1, node, user, 70n);
+      await checkUserRewardCycleStake(1, node, user, 70n);
     });
 
     it("uses user's current user stake for next reward cycle stake", async () => {
@@ -380,23 +333,23 @@ describe.only('Staking Orchestrator', () => {
       await stakingOrchestrator.syloStakeAdded(node, user, 100);
 
       await checkUserStake(node, user, 100);
-      await checkRewardCycleUserStake(1, node, user, 100);
+      await checkUserRewardCycleStake(1, node, user, 100);
 
       await stakingOrchestrator.syloStakeAdded(node, user, 33);
 
       await checkUserStake(node, user, 133);
-      await checkRewardCycleUserStake(1, node, user, 133);
+      await checkUserRewardCycleStake(1, node, user, 133);
 
       await stakingOrchestrator.syloStakeRemoved(node, user, 66);
 
       await checkUserStake(node, user, 67);
-      await checkRewardCycleUserStake(1, node, user, 67);
+      await checkUserRewardCycleStake(1, node, user, 67);
 
       // start the protocol and confirm values
       await increase(1100);
 
       await checkUserStake(node, user, 67);
-      await checkRewardCycleUserStake(1, node, user, 67);
+      await checkUserRewardCycleStake(1, node, user, 67);
     });
 
     it('can update user stake after first cycle', async () => {
@@ -404,7 +357,7 @@ describe.only('Staking Orchestrator', () => {
 
       for (let i = 0; i < 10; i++) {
         await checkUserStake(node, user, 0);
-        await checkRewardCycleUserStake(i + 1, node, user, 0);
+        await checkUserRewardCycleStake(i + 1, node, user, 0);
         await setTimeSinceStart((i + 1) * 1000);
       }
 
@@ -414,7 +367,7 @@ describe.only('Staking Orchestrator', () => {
       await stakingOrchestrator.syloStakeAdded(node, user, 100);
 
       await checkUserStake(node, user, 100);
-      await checkRewardCycleUserStake(currentCycle, node, user, 100);
+      await checkUserRewardCycleStake(currentCycle, node, user, 100);
     });
 
     it('calculates node stake as sum of all user stakes', async () => {
@@ -445,7 +398,17 @@ describe.only('Staking Orchestrator', () => {
       for (let i = 1; i < 6; i++) {
         await performStakingUpdates();
 
-        await checkNodeStake(node, users);
+        let summedUserStake = 0n;
+
+        // sum all user stakes
+        for (const user of users) {
+          const userStake = await stakingOrchestrator.getUserStake(node, user);
+          summedUserStake += userStake;
+        }
+
+        expect(await stakingOrchestrator.getNodeStake(node)).to.equal(
+          summedUserStake,
+        );
 
         await setTimeSinceStart(i * 1000);
       }
@@ -519,6 +482,409 @@ describe.only('Staking Orchestrator', () => {
     });
   });
 
+  describe('Tests seeker staking', async () => {
+    it('can add seeker stakes to increase capacity', async () => {
+      const seekers = await Promise.all(
+        Array(5)
+          .fill(0)
+          .map(_ =>
+            createAndRegisterSeeker(contracts.seekerStatsOracle, accounts[0]),
+          ),
+      );
+
+      for (let i = 0; i < seekers.length; i++) {
+        await stakingOrchestrator.seekerStakeAdded(
+          node,
+          user,
+          seekers[i].seekerId,
+        );
+
+        // check node capacity based on current staked seekers
+        const nodeCapacity = await checkNodeStakingCapacity(
+          node,
+          seekers.slice(0, i + 1),
+        );
+
+        // a single contributes all seekers, so would have the same capacity
+        // as the node
+        expect(
+          await stakingOrchestrator.getStakingCapacityByUser(node, user),
+        ).to.equal(nodeCapacity);
+      }
+    });
+
+    it('can remove seeker stakes and decrease capacity', async () => {
+      const seekers = await Promise.all(
+        Array(5)
+          .fill(0)
+          .map(_ =>
+            createAndRegisterSeeker(contracts.seekerStatsOracle, accounts[0]),
+          ),
+      );
+
+      for (let i = 0; i < seekers.length; i++) {
+        await stakingOrchestrator.seekerStakeAdded(
+          node,
+          user,
+          seekers[i].seekerId,
+        );
+      }
+
+      for (let i = 0; i < seekers.length; i++) {
+        await stakingOrchestrator.seekerStakeRemoved(
+          node,
+          user,
+          seekers[i].seekerId,
+        );
+
+        // check node capacity based on remaining staked seekers
+        const nodeCapacity = await checkNodeStakingCapacity(
+          node,
+          seekers.slice(i + 1, seekers.length),
+        );
+
+        // a single contributes all seekers, so would have the same capacity
+        // as the node
+        expect(
+          await stakingOrchestrator.getStakingCapacityByUser(node, user),
+        ).to.equal(nodeCapacity);
+      }
+    });
+
+    it('can update node capacity from multiple users staking seekers', async () => {
+      const registeredSeekers = [];
+      for (const user of users) {
+        const seekers = await Promise.all(
+          Array(5)
+            .fill(0)
+            .map(_ =>
+              createAndRegisterSeeker(contracts.seekerStatsOracle, accounts[0]),
+            ),
+        );
+
+        for (const seeker of seekers) {
+          registeredSeekers.push({
+            user,
+            seeker,
+          });
+        }
+      }
+
+      // shuffles the seekers
+      registeredSeekers.sort(() => Math.random() - 0.5);
+
+      const stakedSeekers = [];
+
+      const userRanks: { [user: string]: number } = {};
+
+      // stake all registered seekers and validate capacities after
+      // each seeker stake
+      for (const registeredSeeker of registeredSeekers) {
+        await stakingOrchestrator.seekerStakeAdded(
+          node,
+          user,
+          registeredSeeker.seeker.seekerId,
+        );
+
+        stakedSeekers.push(registeredSeeker.seeker);
+
+        const nodeCapacity = await checkNodeStakingCapacity(
+          node,
+          stakedSeekers,
+        );
+
+        const nodeStats = sumSeekerStats(stakedSeekers);
+
+        if (userRanks[user]) {
+          userRanks[user] += registeredSeeker.seeker.rank;
+        } else {
+          userRanks[user] = registeredSeeker.seeker.rank;
+        }
+
+        // the user capacity is based on the user's rank contribution
+        const expectedUserCapacity =
+          (nodeCapacity * BigInt(userRanks[user])) / BigInt(nodeStats.rank);
+
+        expect(
+          await stakingOrchestrator.getStakingCapacityByUser(node, user),
+        ).to.equal(expectedUserCapacity);
+      }
+
+      // unstake all registered seekers and validate capacities after
+      // each seeker stake removal
+      for (const registeredSeeker of registeredSeekers) {
+        await stakingOrchestrator.seekerStakeRemoved(
+          node,
+          user,
+          registeredSeeker.seeker.seekerId,
+        );
+
+        const idx = stakedSeekers.findIndex(
+          seeker => seeker.seekerId === registeredSeeker.seeker.seekerId,
+        );
+        stakedSeekers.splice(idx, 1);
+
+        const nodeCapacity = await checkNodeStakingCapacity(
+          node,
+          stakedSeekers,
+        );
+
+        const nodeStats = sumSeekerStats(stakedSeekers);
+
+        userRanks[user] -= registeredSeeker.seeker.rank;
+
+        const expectedUserCapacity =
+          nodeStats.rank == 0
+            ? 0
+            : (nodeCapacity * BigInt(userRanks[user])) / BigInt(nodeStats.rank);
+
+        expect(
+          await stakingOrchestrator.getStakingCapacityByUser(node, user),
+        ).to.equal(expectedUserCapacity);
+      }
+    });
+
+    it('user staking capacity is not affected by other users changing seeker stake', async () => {
+      const seekerOne = await createAndRegisterSeeker(
+        contracts.seekerStatsOracle,
+        accounts[0],
+      );
+
+      await stakingOrchestrator.seekerStakeAdded(
+        node,
+        users[0],
+        seekerOne.seekerId,
+      );
+
+      const userOneCapacity =
+        await stakingOrchestrator.getStakingCapacityByUser(node, users[0]);
+
+      const stakedSeekers = [];
+
+      // for the remaining users, have them also stake seekers
+      for (const user of users.slice(1)) {
+        const seeker = await createAndRegisterSeeker(
+          contracts.seekerStatsOracle,
+          accounts[0],
+        );
+
+        await stakingOrchestrator.seekerStakeAdded(node, user, seeker.seekerId);
+
+        stakedSeekers.push({ user, seeker });
+      }
+
+      // validate the first user's staking capacity has not changed
+      expect(
+        await stakingOrchestrator.getStakingCapacityByUser(node, user),
+      ).to.equal(userOneCapacity);
+
+      // unstake the seekers
+      for (const stakedSeeker of stakedSeekers) {
+        await stakingOrchestrator.seekerStakeRemoved(
+          node,
+          stakedSeeker.user,
+          stakedSeeker.seeker.seekerId,
+        );
+      }
+
+      // validate the first user's staking capacity has not changed
+      expect(
+        await stakingOrchestrator.getStakingCapacityByUser(node, user),
+      ).to.equal(userOneCapacity);
+    });
+
+    it('penalizes sylo stake if there is no capacity', async () => {
+      await startProtocol();
+
+      const stakeAmount = 100n;
+
+      await stakingOrchestrator.syloStakeAdded(node, user, stakeAmount);
+
+      // as there is no staking capacity, all of the user's stake is
+      // penalized
+      const expectedUserStake = stakeAmount / penaltyFactor;
+
+      await checkUserStake(node, user, stakeAmount / penaltyFactor);
+      await checkUserRewardCycleStake(1, node, user, expectedUserStake);
+      await checkNodeRewardCycleStake(1, node, [user], expectedUserStake);
+
+      // the node's stake is the sum of all user stakes, but then is also
+      // penalized by the node's staking capacity
+      await checkNodeStake(node, expectedUserStake / penaltyFactor);
+    });
+
+    it('does not penalize sylo stake within capacity', async () => {
+      await timeManagerUtilities.setProtocolStartIn(1000);
+
+      await createAndStakeSeeker(node, user);
+
+      await stakingOrchestrator.syloStakeAdded(node, user, 100n);
+
+      await checkUserStake(node, user, 100);
+      await checkUserRewardCycleStake(1, node, user, 100);
+    });
+
+    it('penalizes sylo stake that is not within staking capacity', async () => {
+      await timeManagerUtilities.setProtocolStartIn(1000);
+
+      const { stakingCapacity } = await createAndStakeSeeker(node, user);
+
+      // stake 100 more than staking capacity
+      await stakingOrchestrator.syloStakeAdded(
+        node,
+        user,
+        stakingCapacity + 100n,
+      );
+
+      const expectedStakeAmount = stakingCapacity + 100n / penaltyFactor;
+
+      await checkUserStake(node, user, expectedStakeAmount);
+      await checkUserRewardCycleStake(1, node, user, expectedStakeAmount);
+    });
+
+    it('treats increasing staking capacity as adding stake if over staked', async () => {
+      await timeManagerUtilities.setProtocolStartIn(1000);
+
+      const { stakingCapacity } = await createAndStakeSeeker(node, user);
+
+      // stake 100 more than staking capacity
+      await stakingOrchestrator.syloStakeAdded(
+        node,
+        user,
+        stakingCapacity + 100n,
+      );
+
+      const totalStake = stakingCapacity + 100n;
+
+      // stake another seeker which will be sufficient to cover entire stake
+      await createAndStakeSeeker(node, user);
+
+      await checkUserStake(node, user, totalStake);
+      await checkUserRewardCycleStake(1, node, user, totalStake);
+    });
+
+    it('treats decreasing staking capacity as removing stake if it results in being over staked', async () => {
+      await timeManagerUtilities.setProtocolStartIn(1000);
+
+      const { seeker } = await createAndStakeSeeker(node, user);
+
+      await stakingOrchestrator.syloStakeAdded(node, user, 100n);
+
+      await stakingOrchestrator.seekerStakeRemoved(node, user, seeker.seekerId);
+
+      // all stake should be penalized now
+      await checkUserStake(node, user, 100n / penaltyFactor);
+      await checkUserRewardCycleStake(1, node, user, 100n / penaltyFactor);
+    });
+
+    it('does not decrease stake when unstaking seeker if not overstaked', async () => {
+      await timeManagerUtilities.setProtocolStartIn(1000);
+
+      const { stakingCapacity } = await createAndStakeSeeker(node, user);
+
+      // we stake 2 seekers which provides more staking capacity
+      const { seeker } = await createAndStakeSeeker(node, user);
+
+      // we stake only up to the capacity provied by the first seeker
+      await stakingOrchestrator.syloStakeAdded(node, user, stakingCapacity);
+
+      await checkUserStake(node, user, stakingCapacity);
+      await checkUserRewardCycleStake(1, node, user, stakingCapacity);
+
+      // unstake the second seeker
+      await stakingOrchestrator.seekerStakeRemoved(node, user, seeker.seekerId);
+
+      // stake should remain the same
+      await checkUserStake(node, user, stakingCapacity);
+      await checkUserRewardCycleStake(1, node, user, stakingCapacity);
+    });
+
+    it('changing stake through staking capacity follows cycle adjustment rules', async () => {
+      await timeManagerUtilities.setProtocolStartIn(1000);
+
+      const { stakingCapacity } = await createAndStakeSeeker(node, user);
+
+      // stake 100 more than staking capacity
+      await stakingOrchestrator.syloStakeAdded(
+        node,
+        user,
+        stakingCapacity + 100n,
+      );
+
+      const totalStake = stakingCapacity + 100n;
+
+      const { setTimeSinceStart } = await startProtocol();
+
+      const startingRewardStake =
+        await stakingOrchestrator.getRewardCycleStakeByUser(1, node, user);
+
+      const seeker = await createAndRegisterSeeker(
+        contracts.seekerStatsOracle,
+        accounts[0],
+      );
+
+      await setTimeSinceStart(510);
+
+      // this will increase the staking capacity, so the remaining overstaked
+      // part is added (+75)
+      await stakingOrchestrator.seekerStakeAdded(node, user, seeker.seekerId);
+
+      await checkUserStake(node, user, totalStake);
+
+      // as the stake was increased halfway, it should be only half as effected
+      await checkUserRewardCycleStake(
+        1,
+        node,
+        user,
+        startingRewardStake + 75n / 2n,
+      );
+
+      // remove the staked seeker
+      await stakingOrchestrator.seekerStakeRemoved(node, user, seeker.seekerId);
+
+      await checkUserRewardCycleStake(1, node, user, startingRewardStake);
+    });
+
+    it('does not update users stake when other users change node staking capacity', async () => {
+      await timeManagerUtilities.setProtocolStartIn(10000);
+
+      const stakedSeekers = [];
+
+      for (const user of users) {
+        const seeker = await createAndStakeSeeker(node, user);
+        stakedSeekers.push({ user, seeker });
+      }
+
+      const stakingCapacity =
+        await stakingOrchestrator.getStakingCapacityByUser(node, users[0]);
+
+      const totalStake = stakingCapacity + 100n;
+
+      await stakingOrchestrator.syloStakeAdded(node, user, totalStake);
+
+      // these values should not change as the other users stake/unstake seekers
+      const userStake = await stakingOrchestrator.getUserStake(node, users[0]);
+      const rewardCycleStake =
+        await stakingOrchestrator.getRewardCycleStakeByUser(1, node, users[0]);
+
+      for (const user of users.slice(1)) {
+        const seeker = await createAndStakeSeeker(node, user);
+
+        await checkUserStake(node, users[0], userStake);
+        await checkUserRewardCycleStake(1, node, users[0], rewardCycleStake);
+
+        await stakingOrchestrator.seekerStakeRemoved(
+          node,
+          user,
+          seeker.seeker.seekerId,
+        );
+
+        await checkUserStake(node, users[0], userStake);
+        await checkUserRewardCycleStake(1, node, users[0], rewardCycleStake);
+      }
+    });
+  });
+
   async function checkUserStake(
     node: string,
     user: string,
@@ -529,7 +895,7 @@ describe.only('Staking Orchestrator', () => {
     );
   }
 
-  async function checkRewardCycleUserStake(
+  async function checkUserRewardCycleStake(
     cycle: BigNumberish,
     node: string,
     user: string,
@@ -540,17 +906,9 @@ describe.only('Staking Orchestrator', () => {
     ).to.equal(expectedAmount);
   }
 
-  async function checkNodeStake(node: string, users: string[]) {
-    let expectedNodeStake = 0n;
-
-    // sum all user stakes
-    for (const user of users) {
-      const userStake = await stakingOrchestrator.getUserStake(node, user);
-      expectedNodeStake += userStake;
-    }
-
+  async function checkNodeStake(node: string, expectedAmount: BigNumberish) {
     expect(await stakingOrchestrator.getNodeStake(node)).to.equal(
-      expectedNodeStake,
+      expectedAmount,
     );
   }
 
@@ -558,20 +916,94 @@ describe.only('Staking Orchestrator', () => {
     cycle: BigNumberish,
     node: string,
     users: string[],
+    expectedAmount?: BigNumberish,
   ) {
-    let expectedNodeCycleStake = 0n;
+    let summedRewardCycleStake = 0n;
 
     // sum all user reward cycle stakes
     for (const user of users) {
       const rewardCycleUserStake =
         await stakingOrchestrator.getRewardCycleStakeByUser(cycle, node, user);
-      expectedNodeCycleStake += rewardCycleUserStake;
+      summedRewardCycleStake += rewardCycleUserStake;
     }
 
     expect(
       await stakingOrchestrator.getRewardCycleStakeByNode(cycle, node),
-    ).to.equal(expectedNodeCycleStake);
+    ).to.equal(summedRewardCycleStake);
+
+    if (expectedAmount) {
+      expect(summedRewardCycleStake).to.equal(expectedAmount);
+    }
   }
+
+  async function checkNodeStakingCapacity(node: string, seekers: Seeker[]) {
+    const totalStats = sumSeekerStats(seekers);
+
+    // validate the staking capacities after each addition
+    const coverage =
+      await contracts.seekerStatsOracle.calculateAttributeCoverage(
+        totalStats.attrReactor,
+        totalStats.attrCores,
+        totalStats.attrDurability,
+        totalStats.attrSensors,
+        totalStats.attrStorage,
+        totalStats.attrChip,
+      );
+
+    const nodeCapacity = coverage * coverageMultiplier;
+
+    expect(await stakingOrchestrator.getStakingCapacityByNode(node)).to.equal(
+      nodeCapacity,
+    );
+
+    return nodeCapacity;
+  }
+
+  const sumSeekerStats = (seekers: Seeker[]) => {
+    let rank = 0;
+    let attrReactor = 0;
+    let attrCores = 0;
+    let attrDurability = 0;
+    let attrSensors = 0;
+    let attrStorage = 0;
+    let attrChip = 0;
+
+    for (const seeker of seekers) {
+      rank += seeker.rank;
+      attrReactor += seeker.attrReactor;
+      attrCores += seeker.attrCores;
+      attrDurability += seeker.attrDurability;
+      attrSensors += seeker.attrSensors;
+      attrStorage += seeker.attrStorage;
+      attrChip += seeker.attrChip;
+    }
+
+    return {
+      rank,
+      attrReactor,
+      attrCores,
+      attrDurability,
+      attrSensors,
+      attrStorage,
+      attrChip,
+    };
+  };
+
+  const createAndStakeSeeker = async (node: string, user: string) => {
+    const seeker = await createAndRegisterSeeker(
+      contracts.seekerStatsOracle,
+      accounts[0],
+    );
+
+    await stakingOrchestrator.seekerStakeAdded(node, user, seeker.seekerId);
+
+    const stakingCapacity = await stakingOrchestrator.getStakingCapacityByUser(
+      node,
+      user,
+    );
+
+    return { seeker, stakingCapacity };
+  };
 
   const setMaximumStakingCapacity = async (node: string, user: string) => {
     await stakingOrchestrator.setCapacityCoverageMultiplier(MAX_SYLO);

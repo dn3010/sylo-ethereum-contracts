@@ -2,6 +2,10 @@
 pragma solidity ^0.8.18;
 
 interface IStakingOrchestrator {
+    function getStakingCapacityByNode(address node) external view returns (uint256);
+
+    function getStakingCapacityByUser(address node, address user) external view returns (uint256);
+
     function getNodeStake(address node) external view returns (uint256);
 
     function getUserStake(address node, address user) external view returns (uint256);
