@@ -1,7 +1,12 @@
 import { ethers } from 'hardhat';
 import { Wallet, BigNumberish, HDNodeWallet, Block } from 'ethers';
 import { SyloContracts } from '../../common/contracts';
-import { deployContracts, signatureTypes, getLatestBlock } from '../utils';
+import {
+  deployContracts,
+  signatureTypes,
+  getLatestBlock,
+  getTimeManagerUtil,
+} from '../utils';
 import { ContractTransactionResponse, Signer } from 'ethers';
 import { expect } from 'chai';
 import {
@@ -39,6 +44,8 @@ describe('Ticketing', () => {
     sufficientEscrow = (await ticketing.faceValue()) + 100n;
     insufficientEscrow = (await ticketing.faceValue()) - 100n;
     penalty = 500n;
+
+    await getTimeManagerUtil(contracts.protocolTimeManager).startProtocol();
   });
 
   it('cannot initialize deposits with invalid arguments', async () => {
@@ -1540,8 +1547,8 @@ export async function redeemTicket(
     redeemerRand: number;
     cycle: number;
   },
-  escrowAmount?: bigint,
-  penaltyAmount?: bigint,
+  escrowAmount?: BigNumberish,
+  penaltyAmount?: BigNumberish,
 ): Promise<void> {
   escrowAmount &&
     (await depositsContract

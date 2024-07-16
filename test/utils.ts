@@ -195,6 +195,7 @@ export async function deployContracts(
   await rewardsManager.initialize(
     syloToken.getAddress(),
     registries.getAddress(),
+    protocolTimeManager.getAddress(),
     ticketing.getAddress(),
     stakingOrchestrator.getAddress(),
   );

@@ -183,6 +183,7 @@ describe('Registries', () => {
   it('registries supports correct interfaces', async () => {
     const abi = [
       'function register(string calldata publicEndpoint) external',
+      'function getDefaultPayoutPercentage() external returns (uint32)',
       'function setDefaultPayoutPercentage(uint32 _defaultPayoutPercentage) external',
       'function getRegistry(address account) external view returns ((uint32, string) memory)',
       'function getNodes() external view returns (address[] memory)',

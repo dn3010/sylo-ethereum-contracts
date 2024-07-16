@@ -195,8 +195,8 @@ describe('Seeker Staking Manager', () => {
         stakedSeekerByIdBefore[2],
       ),
     );
-    assert.equal(stakedSeekerByNodeBefore.length, 0);
-    assert.equal(stakedSeekerByUserBefore.length, 0);
+    expect(stakedSeekerByNodeBefore.length).to.equal(0);
+    expect(stakedSeekerByUserBefore.length).to.equal(0);
 
     await seekerStakingManager.stakeSeeker(nodeOne, seeker, signature);
 

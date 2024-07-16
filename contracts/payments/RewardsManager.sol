@@ -12,6 +12,8 @@ import "../staking/IStakingOrchestrator.sol";
 import "./IRewardsManager.sol";
 import "./ITicketing.sol";
 
+import "hardhat/console.sol";
+
 contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     /**
      * @notice The only ticketing role given to the ticketing contract
@@ -53,30 +55,32 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      */
     mapping(address => uint256) unclaimedNodeCommission;
 
+    error TokenAddressCannotBeNil();
     error RegistriesAddressCannotBeNil();
     error TicketingAddressCannotBeNil();
     error ProtocolTimeManagerAddressCannotBeNil();
     error StakingOrchestratorAddressCannotBeNil();
     error CannotIncrementRewardPoolWithZeroNodeAddress();
     error CannotIncrementRewardPoolWithZeroAmount();
-    error CannotInitializeWithNonTicketing();
     error RewardForCycleAlreadyClaimed();
-    error CannotClaimForUnfinishedCycle();
+    error CannotGetClaimForUnfinishedCycle();
     error CannotClaimZeroAmount();
 
     function initialize(IERC20 _token, IRegistries _registries, IProtocolTimeManager _protocolTimeManager, ITicketing _ticketing, IStakingOrchestrator _stakingOrchestrator) external initializer {
+        if (address(_token) == address(0)) {
+            revert TokenAddressCannotBeNil();
+        }
         if (address(_registries) == address(0)) {
             revert RegistriesAddressCannotBeNil();
+        }
+        if (address(_protocolTimeManager) == address(0)) {
+            revert ProtocolTimeManagerAddressCannotBeNil();
         }
         if (address(_ticketing) == address(0)) {
             revert TicketingAddressCannotBeNil();
         }
         if (address(_stakingOrchestrator) == address(0)) {
             revert StakingOrchestratorAddressCannotBeNil();
-        }
-
-        if (!ERC165(address(_ticketing)).supportsInterface(type(ITicketing).interfaceId)) {
-            revert CannotInitializeWithNonTicketing();
         }
 
         token = _token;
@@ -129,6 +133,33 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         return rewardPools[node][cycle];
     }
 
+    function getClaim(address node, address user, uint256 cycle) external view returns (uint256) {
+        return _getClaim(node, user, cycle);
+    }
+
+    function _getClaim(address node, address user, uint256 cycle) internal view returns (uint256) {
+        IProtocolTimeManager.Cycle memory currentCycle = protocolTimeManager.getCurrentCycle();
+
+        if (currentCycle.iteration <= cycle) {
+            revert CannotGetClaimForUnfinishedCycle();
+        }
+
+        uint256 nodeRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByNode(cycle, node);
+        uint256 userRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByUser(cycle, node, user);
+
+        if (nodeRewardCycleStake == 0) {
+            nodeRewardCycleStake = 1;
+        }
+
+        uint256 claimAmount = rewardPools[node][cycle] * userRewardCycleStake / nodeRewardCycleStake;
+
+        if (user == node) {
+            claimAmount += unclaimedNodeCommission[node];
+        }
+
+        return claimAmount;
+    }
+
     /**
      * @notice Sums the nodes reward pools over the given cycles.
      * Returning the stakers reward over multiple cycles.
@@ -164,16 +195,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
             revert RewardForCycleAlreadyClaimed();
         }
 
-        IProtocolTimeManager.Cycle memory currentCycle = protocolTimeManager.getCurrentCycle();
-
-        if (currentCycle.iteration <= cycle) {
-            revert CannotClaimForUnfinishedCycle();
-        }
-
-        uint256 nodeRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByNode(cycle, node);
-        uint256 userRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByUser(cycle, node, msg.sender);
-
-        uint256 claimAmount = rewardPools[node][cycle] * userRewardCycleStake / nodeRewardCycleStake;
+        uint256 claimAmount = _getClaim(node, msg.sender, cycle);
 
         if (claimAmount == 0) {
             revert CannotClaimZeroAmount();
@@ -182,5 +204,9 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         SafeERC20.safeTransfer(token, msg.sender, claimAmount);
 
         claims[node][msg.sender][cycle] = true;
+
+        if (msg.sender == node) {
+            unclaimedNodeCommission[node] = 0;
+        }
     }
 }
