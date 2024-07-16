@@ -192,9 +192,11 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
 
     mapping(address => mapping(address => uint256)) seekerRankTotalsByUser;
 
+    /** events **/
     event CapacityCoverageMultiplierUpdated(uint256 capacityCoverageMultiplier);
     event CapacityPenaltyFactorUpdated(uint256 capacityPenaltyFactor);
 
+    /** errors **/
     error ProtocolTimeManagerAddressCannotBeNil();
     error SeekerStatsOracleAddressCannotBeNil();
 
@@ -204,6 +206,14 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         uint256 _capacityCoverageMultiplier,
         uint256 _capacityPenaltyFactor
     ) external initializer {
+        if (address(_protocolTimeManager) == address(0)) {
+            revert ProtocolTimeManagerAddressCannotBeNil();
+        }
+
+        if (address(_seekerStatsOracle) == address(0)) {
+            revert SeekerStatsOracleAddressCannotBeNil();
+        }
+
         protocolTimeManager = _protocolTimeManager;
         seekerStatsOracle = _seekerStatsOracle;
 

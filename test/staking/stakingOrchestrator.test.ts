@@ -50,6 +50,35 @@ describe('Staking Orchestrator', () => {
     penaltyFactor = await stakingOrchestrator.capacityPenaltyFactor();
   });
 
+  it('cannot initialize staking orchestrator with invalid parameters', async () => {
+    const factory = await ethers.getContractFactory('StakingOrchestrator');
+    const stakingOrchestrator = await factory.deploy();
+
+    await expect(
+      stakingOrchestrator.initialize(
+        ethers.ZeroAddress,
+        accounts[0].getAddress(),
+        0,
+        0,
+      ),
+    ).to.be.revertedWithCustomError(
+      stakingOrchestrator,
+      'ProtocolTimeManagerAddressCannotBeNil',
+    );
+
+    await expect(
+      stakingOrchestrator.initialize(
+        accounts[0].getAddress(),
+        ethers.ZeroAddress,
+        0,
+        0,
+      ),
+    ).to.be.revertedWithCustomError(
+      stakingOrchestrator,
+      'SeekerStatsOracleAddressCannotBeNil',
+    );
+  });
+
   it('cannot initialize staking orchestrator more than once', async () => {
     await expect(
       stakingOrchestrator.initialize(
@@ -73,7 +102,7 @@ describe('Staking Orchestrator', () => {
       .withArgs(333n);
   });
 
-  it('cannot set capacity coverage multipler as non-owner role', async () => {
+  it('cannot set capacity coverage multiplier as non-owner role', async () => {
     await expect(
       stakingOrchestrator.connect(accounts[1]).setCapacityCoverageMultiplier(1),
     ).to.be.revertedWith(
@@ -84,7 +113,7 @@ describe('Staking Orchestrator', () => {
     );
   });
 
-  it('cannot set capacity coverage multipler as non-owner role', async () => {
+  it('cannot set capacity penalty factor as non-owner role', async () => {
     await expect(
       stakingOrchestrator.connect(accounts[1]).setCapacityPenaltyFactor(1),
     ).to.be.revertedWith(
@@ -331,7 +360,7 @@ describe('Staking Orchestrator', () => {
       await checkUserRewardCycleStake(1, node, user, 120n);
 
       // we decrease the stake by 75, which should wipe out the remainder of
-      // the second addition, and subtract 25 from the first addition
+      // the second addition, and subtract 30 from the first addition
       await stakingOrchestrator.syloStakeRemoved(node, user, 75n);
 
       await checkUserStake(node, user, 70n);
@@ -361,9 +390,7 @@ describe('Staking Orchestrator', () => {
       expect(rewardCycleStakeOne).to.be.lessThan(userStake);
 
       // progress to cycle 6
-      for (let i = 0; i < 5; i++) {
-        await setTimeSinceStart((i + 1) * 1000);
-      }
+      await setTimeSinceStart(5000);
 
       // confirm for cycles 2 to 6, it is equal to the current user stake
       for (let i = 2; i <= 6; i++) {
@@ -583,7 +610,7 @@ describe('Staking Orchestrator', () => {
           seekers.slice(0, i + 1),
         );
 
-        // a single contributes all seekers, so would have the same capacity
+        // a single user contributes all seekers, so would have the same capacity
         // as the node
         expect(
           await stakingOrchestrator.getStakingCapacityByUser(node, user),
@@ -621,7 +648,7 @@ describe('Staking Orchestrator', () => {
           seekers.slice(i + 1, seekers.length),
         );
 
-        // a single contributes all seekers, so would have the same capacity
+        // a single user contributes all seekers, so would have the same capacity
         // as the node
         expect(
           await stakingOrchestrator.getStakingCapacityByUser(node, user),
