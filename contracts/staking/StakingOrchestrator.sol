@@ -31,10 +31,10 @@ import "./seekers/ISeekerStatsOracle.sol";
  * the capacity is divided by the `capacityPenaltyFactor`.
 
  * A node's staking capacity increases when users stake Seekers to it. The
- * capacity is based on the coverage calculation from the SeekerStatsOracle
- * contract. Where the input for each attribute is determined from the sum of
- * all Seeker attributes staked towards that node. This contract tracks the
- * attribute sums whenever a change in Seeker stake is reported via
+ * capacity is based on the coverage calculation as the SeekerStatsOracle
+ * contract. The attribute inputs to the coverage calculation method are determined
+ * from the sum of all Seeker attributes staked towards that node. This contract
+ * tracks the attribute sums whenever a change in Seeker stake is reported via
  * `seekerStakeAdded` and `seekerStakeRemoved`. The contract also tracks the
  * total `rank` value for a node, and each users total `rank` combination as
  * well. A users own staking capacity is the proportion of rank they contribute

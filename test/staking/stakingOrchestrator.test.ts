@@ -814,7 +814,7 @@ describe('Staking Orchestrator', () => {
       await checkNodeRewardCycleStake(1, node, [user], expectedUserStake);
 
       // the node's stake is the sum of all user stakes, but then is also
-      // penalized by the node's staking capacity
+      // penalized by the penalty factor based on the node's staking capacity
       await checkNodeStake(node, expectedUserStake / penaltyFactor);
     });
 

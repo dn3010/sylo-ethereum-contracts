@@ -74,6 +74,17 @@ describe('Seeker Staking Manager', () => {
       seekerStakingManagerTemp,
       'SeekerStatsOracleCannotBeNil',
     );
+
+    await expect(
+      seekerStakingManagerTemp.initialize(
+        await testSeekers.getAddress(),
+        await testSeekers.getAddress(),
+        ethers.ZeroAddress,
+      ),
+    ).to.be.revertedWithCustomError(
+      seekerStakingManagerTemp,
+      'StakingOrchestratorAddressCannotBeNil',
+    );
   });
 
   it('cannot initialize seeker staking manager more than once', async () => {

@@ -57,6 +57,7 @@ contract SeekerStakingManager is
     error SeekerProofCannotBeEmpty();
     error RootSeekersCannotBeZeroAddress();
     error SeekerStatsOracleCannotBeNil();
+    error StakingOrchestratorAddressCannotBeNil();
     error SenderMustOwnSeekerId();
     error SeekerNotYetStaked();
     error SeekerNotStakedToNode();
@@ -75,6 +76,9 @@ contract SeekerStakingManager is
         }
         if (address(_oracle) == address(0)) {
             revert SeekerStatsOracleCannotBeNil();
+        }
+        if (address(_stakingOrchestrator) == address(0)) {
+            revert StakingOrchestratorAddressCannotBeNil();
         }
 
         Ownable2StepUpgradeable.__Ownable2Step_init();
