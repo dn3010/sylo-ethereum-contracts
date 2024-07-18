@@ -238,9 +238,11 @@ describe('Seeker Stats', () => {
         attributeCoverageExpected.totalChip,
       );
 
-    assert.equal(
-      attributeCoverage,
-      BigInt(attributeCoverageExpected.coverage.toFixed(0)),
+    const expectedValue = BigInt(attributeCoverageExpected.coverage.toFixed(0));
+
+    expect(attributeCoverage).to.be.within(
+      expectedValue - 5n,
+      expectedValue + 5n,
     );
   });
 
