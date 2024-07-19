@@ -122,7 +122,7 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
             uint256 periodDuration
         ) = protocolTimeManager.getTime();
 
-        uint256 nodeStake = stakingOrchestrator.getNodeCurrentStake(msg.sender);
+        uint256 nodeStake = stakingOrchestrator.getNodeStake(msg.sender);
         if (nodeStake == 0) {
             revert CannotJoinDirectoryWithZeroStake();
         }

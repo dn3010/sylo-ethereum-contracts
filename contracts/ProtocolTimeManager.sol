@@ -308,7 +308,7 @@ contract ProtocolTimeManager is
      *
      * If the protocol has not started, the function reverts with an error. Otherwise,
      * the current period is determined by dividing the total elapsed time within the
-     * ongoing cycle, by the current period duraiton.
+     * ongoing cycle, by the current period duration.
      * @return uint256 The current period within the ongoing cycle.
      */
     function _getCurrentPeriod() internal view returns (uint256) {

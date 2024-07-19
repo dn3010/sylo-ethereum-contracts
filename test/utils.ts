@@ -5,6 +5,8 @@ import { ProtocolTimeManager } from '../typechain-types';
 import { increaseTo } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 import { Block } from 'ethers';
 
+export const MAX_SYLO = ethers.parseEther('10000000000');
+
 export enum signatureTypes {
   main,
   authorizedAccount,
@@ -17,6 +19,10 @@ export type DeploymentOptions = {
   };
   seekerStatsOracle?: {
     oracleAccount?: Address;
+  };
+  stakingOrchestrator?: {
+    capacityCoverageMultiplier?: number;
+    capacityPenaltyFactor?: number;
   };
   protocolTimeManager?: {
     cycleDuration?: number;
@@ -97,7 +103,13 @@ export async function deployContracts(
   const seekerStatsOracleOpts = {
     oracleAccount:
       opts.seekerStatsOracle?.oracleAccount ??
-      '0xd9D6945dfe8c1C7aFaFcDF8bf1D1c5beDfeccABF',
+      (await (await ethers.getSigners())[0].getAddress()),
+  };
+
+  const stakingOrchestratorOpts = {
+    capacityCoverageMultiplier:
+      opts.stakingOrchestrator?.capacityCoverageMultiplier ?? 1000,
+    capacityPenaltyFactor: opts.stakingOrchestrator?.capacityPenaltyFactor ?? 4,
   };
 
   const protocolTimeManagerOpts = {
@@ -118,13 +130,14 @@ export async function deployContracts(
     multiReceiverFaceValue: opts.ticketing?.multiReceiverFaceValue ?? 1000n,
     baseLiveWinProb: opts.ticketing?.baseLiveWinProb ?? 2n ** 128n - 1n,
     expiredWinProb: opts.ticketing?.expiredWinProb ?? 2n ** 128n - 1n,
-    ticketDuration: opts.ticketing?.ticketDuration ?? 1000n,
+    ticketDuration: opts.ticketing?.ticketDuration ?? 1000000n,
     decayRate: opts.ticketing?.decayRate ?? 80000n,
   };
 
   // Initliaze
   await syloStakingManager.initialize(
     await syloToken.getAddress(),
+    await stakingOrchestrator.getAddress(),
     syloStakingManagerOpts.unlockDuration,
   );
 
@@ -133,6 +146,24 @@ export async function deployContracts(
   await seekerStakingManager.initialize(
     await seekers.getAddress(),
     await seekerStatsOracle.getAddress(),
+    await stakingOrchestrator.getAddress(),
+  );
+
+  await stakingOrchestrator.initialize(
+    protocolTimeManager.getAddress(),
+    seekerStatsOracle.getAddress(),
+    stakingOrchestratorOpts.capacityCoverageMultiplier,
+    stakingOrchestratorOpts.capacityPenaltyFactor,
+  );
+
+  await stakingOrchestrator.grantRole(
+    await stakingOrchestrator.onlyStakingManager(),
+    syloStakingManager.getAddress(),
+  );
+
+  await stakingOrchestrator.grantRole(
+    await stakingOrchestrator.onlyStakingManager(),
+    seekerStakingManager.getAddress(),
   );
 
   await registries.initialize(registriesOpts.defaultPayoutPercentage);
@@ -219,7 +250,7 @@ export async function getLatestBlock(): Promise<Block> {
   return block;
 }
 
-export type timeManagerUtilType = {
+export type ProtocolTimeManagerUtilities = {
   startProtocol: () => Promise<{
     start: number;
     setTimeSinceStart: (time: number) => Promise<void>;
@@ -229,7 +260,7 @@ export type timeManagerUtilType = {
 
 export function getTimeManagerUtil(
   protocolTimeManager: ProtocolTimeManager,
-): timeManagerUtilType {
+): ProtocolTimeManagerUtilities {
   const setProtocolStartIn = async (time: number): Promise<number> => {
     const block = await ethers.provider.getBlock('latest').then(b => {
       if (!b) throw new Error('block undefined');

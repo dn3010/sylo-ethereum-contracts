@@ -1,6 +1,6 @@
 import { ethers } from 'hardhat';
 import { SyloContracts } from '../../common/contracts';
-import { deployContracts, getInterfaceId } from '../utils';
+import { deployContracts, getInterfaceId, getTimeManagerUtil } from '../utils';
 import { ContractTransactionResponse, Signer } from 'ethers';
 import { assert, expect } from 'chai';
 import { SyloStakingManager } from '../../typechain-types';
@@ -15,6 +15,9 @@ describe('Sylo Staking', () => {
     accounts = await ethers.getSigners();
     contracts = await deployContracts();
     syloStakingManager = contracts.syloStakingManager;
+
+    const { startProtocol } = getTimeManagerUtil(contracts.protocolTimeManager);
+    await startProtocol();
   });
 
   it('cannot initialize sylo staking manager with invalid arguemnts', async () => {
@@ -22,7 +25,11 @@ describe('Sylo Staking', () => {
     const syloStakingManagerTemp = await factory.deploy();
 
     await expect(
-      syloStakingManagerTemp.initialize(ethers.ZeroAddress, 100n),
+      syloStakingManagerTemp.initialize(
+        ethers.ZeroAddress,
+        ethers.ZeroAddress,
+        100n,
+      ),
     ).to.be.revertedWithCustomError(
       syloStakingManagerTemp,
       'SyloAddressCannotBeNil',
@@ -33,6 +40,7 @@ describe('Sylo Staking', () => {
     await expect(
       syloStakingManager.initialize(
         await contracts.syloToken.getAddress(),
+        await contracts.stakingOrchestrator.getAddress(),
         100n,
       ),
     ).to.be.revertedWith('Initializable: contract is already initialized');

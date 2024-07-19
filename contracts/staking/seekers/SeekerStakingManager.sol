@@ -7,7 +7,8 @@ import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 import "./ISeekerStakingManager.sol";
-import "./SeekerStatsOracle.sol";
+import "./ISeekerStatsOracle.sol";
+import "../IStakingOrchestrator.sol";
 
 contract SeekerStakingManager is
     ISeekerStakingManager,
@@ -24,7 +25,10 @@ contract SeekerStakingManager is
     /**
      * @notice Holds the Seekers metadata from Ethereum, set manually in TRN
      */
-    SeekerStatsOracle public oracle;
+    ISeekerStatsOracle public oracle;
+
+    /** Staking Orchestrator address */
+    IStakingOrchestrator public stakingOrchestrator;
 
     /**
      * @notice mapping to track staked seekers by seeker ID
@@ -53,6 +57,7 @@ contract SeekerStakingManager is
     error SeekerProofCannotBeEmpty();
     error RootSeekersCannotBeZeroAddress();
     error SeekerStatsOracleCannotBeNil();
+    error StakingOrchestratorAddressCannotBeNil();
     error SenderMustOwnSeekerId();
     error SeekerNotYetStaked();
     error SeekerNotStakedToNode();
@@ -65,18 +70,22 @@ contract SeekerStakingManager is
         NIL // No error
     }
 
-    function initialize(IERC721 _rootSeekers, SeekerStatsOracle _oracle) external initializer {
+    function initialize(IERC721 _rootSeekers, ISeekerStatsOracle _oracle, IStakingOrchestrator _stakingOrchestrator) external initializer {
         if (address(_rootSeekers) == address(0)) {
             revert RootSeekersCannotBeZeroAddress();
         }
         if (address(_oracle) == address(0)) {
             revert SeekerStatsOracleCannotBeNil();
         }
+        if (address(_stakingOrchestrator) == address(0)) {
+            revert StakingOrchestratorAddressCannotBeNil();
+        }
 
         Ownable2StepUpgradeable.__Ownable2Step_init();
 
         rootSeekers = _rootSeekers;
         oracle = _oracle;
+        stakingOrchestrator = _stakingOrchestrator;
     }
 
     function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
@@ -130,7 +139,7 @@ contract SeekerStakingManager is
             revert SenderMustOwnSeekerId();
         }
         // Register a seeker if not registered yet
-        if (!oracle.isSeekerRegistered(seeker)) {
+        if (!oracle.isSeekerRegistered(seeker.seekerId)) {
             if (seekerStatsProof.length == 0) {
                 revert SeekerProofCannotBeEmpty();
             }
@@ -148,6 +157,9 @@ contract SeekerStakingManager is
         });
         stakedSeekersByNode[node].push(seeker.seekerId);
         stakedSeekersByUser[msg.sender].push(seeker.seekerId);
+
+        // report to staking orchestrator
+        stakingOrchestrator.seekerStakeAdded(node, msg.sender, seeker.seekerId);
     }
 
     /**
@@ -206,6 +218,9 @@ contract SeekerStakingManager is
         }
 
         delete stakedSeekersById[seekerId];
+
+        // report to staking orchestrator
+        stakingOrchestrator.seekerStakeRemoved(node, msg.sender, seekerId);
     }
 
     function _validateStakedSeeker(
