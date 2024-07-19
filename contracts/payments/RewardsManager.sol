@@ -12,8 +12,6 @@ import "../staking/IStakingOrchestrator.sol";
 import "./IRewardsManager.sol";
 import "./ITicketing.sol";
 
-import "hardhat/console.sol";
-
 contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     /**
      * @notice The only ticketing role given to the ticketing contract
