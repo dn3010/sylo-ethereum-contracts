@@ -351,10 +351,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         );
     }
 
-    function rewardRedeemer(
-        address sender,
-        address redeemer
-    ) internal returns (uint256) {
+    function rewardRedeemer(address sender, address redeemer) internal returns (uint256) {
         IDeposits.Deposit memory deposit = _deposits.getDeposit(sender);
 
         uint256 amount;
@@ -656,11 +653,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
             );
     }
 
-    function incrementRewardPool(
-        address sender,
-        address stakee,
-        uint256 amount
-    ) internal {
+    function incrementRewardPool(address sender, address stakee, uint256 amount) internal {
         _deposits.spendEscrow(sender, amount);
         _rewardsManager.incrementRewardPool(stakee, amount);
     }

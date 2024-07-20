@@ -2,7 +2,6 @@
 pragma solidity ^0.8.18;
 
 interface IRewardsManager {
-
     function getRewardPool(address node, uint256 cycle) external view returns (uint256);
 
     function getRewardPools(

@@ -6,6 +6,7 @@ import {
   signatureTypes,
   getLatestBlock,
   getTimeManagerUtil,
+  getInterfaceId,
 } from '../utils';
 import { ContractTransactionResponse, Signer } from 'ethers';
 import { expect } from 'chai';
@@ -1178,6 +1179,25 @@ describe('Ticketing', () => {
         receiverSig,
       ),
     ).to.be.revertedWithCustomError(ticketing, 'TicketNotWinning');
+  });
+
+  it('ticketing supports correct interfaces', async () => {
+    const abi = [
+      'function redeem((uint256,address,address,address,uint256,bytes32) calldata ticket,uint256 redeemerRand,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata senderSig,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata receiverSig) external',
+      'function redeemMultiReceiver((uint256,address,address,uint256,bytes32) calldata ticket,uint256 redeemerRand,address receiver,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata senderSig,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata receiverSig) external',
+    ];
+
+    const interfaceId = getInterfaceId(abi);
+
+    expect(await ticketing.supportsInterface(interfaceId)).to.equal(true);
+
+    const invalidAbi = ['function foo(uint256 duration) external'];
+
+    const invalidAbiInterfaceId = getInterfaceId(invalidAbi);
+
+    expect(await ticketing.supportsInterface(invalidAbiInterfaceId)).to.equal(
+      false,
+    );
   });
 
   async function createTicket(

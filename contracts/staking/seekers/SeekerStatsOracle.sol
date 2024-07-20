@@ -182,8 +182,7 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
 
     function _isSeekerRegistered(uint256 seekerId) internal view returns (bool) {
         return
-            keccak256(abi.encode(seekerStats[seekerId])) !=
-            keccak256(abi.encode(defaultSeeker));
+            keccak256(abi.encode(seekerStats[seekerId])) != keccak256(abi.encode(defaultSeeker));
     }
 
     /**
@@ -197,7 +196,14 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
      * @param attrStorage Attribute storage value
      * @param attrChip Attribute chip value
      */
-    function calculateAttributeCoverage(uint256 attrReactor, uint256 attrCores, uint256 attrDurability, uint256 attrSensors, uint256 attrStorage, uint256 attrChip) external view returns (int256) {
+    function calculateAttributeCoverage(
+        uint256 attrReactor,
+        uint256 attrCores,
+        uint256 attrDurability,
+        uint256 attrSensors,
+        uint256 attrStorage,
+        uint256 attrChip
+    ) external view returns (int256) {
         int256 coverage = 0;
 
         coverage += int256(attrReactor) * int256(attrCores);
@@ -207,7 +213,7 @@ contract SeekerStatsOracle is ISeekerStatsOracle, Initializable, Ownable2StepUpg
         coverage += int256(attrStorage) * int256(attrChip);
         coverage += int256(attrChip) * int256(attrReactor);
 
-        int256 area = coverage * coverageAngle / 2;
+        int256 area = (coverage * coverageAngle) / 2;
 
         // the coverage angle is scaled by 1e18, so we scale it back
         return area / 1e18;

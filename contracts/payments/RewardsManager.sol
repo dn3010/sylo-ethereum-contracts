@@ -37,7 +37,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      */
     IStakingOrchestrator public stakingOrchestrator;
 
-
     /**
      * @notice Tracks claims from staker accounts
      */
@@ -64,7 +63,13 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     error CannotGetClaimForUnfinishedCycle();
     error CannotClaimZeroAmount();
 
-    function initialize(IERC20 _token, IRegistries _registries, IProtocolTimeManager _protocolTimeManager, ITicketing _ticketing, IStakingOrchestrator _stakingOrchestrator) external initializer {
+    function initialize(
+        IERC20 _token,
+        IRegistries _registries,
+        IProtocolTimeManager _protocolTimeManager,
+        ITicketing _ticketing,
+        IStakingOrchestrator _stakingOrchestrator
+    ) external initializer {
         if (address(_token) == address(0)) {
             revert TokenAddressCannotBeNil();
         }
@@ -106,10 +111,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      * @param node Address of the node
      * @param amount Increment amount of reward pool
      */
-    function incrementRewardPool(
-        address node,
-        uint256 amount
-    ) external onlyRole(onlyTicketing) {
+    function incrementRewardPool(address node, uint256 amount) external onlyRole(onlyTicketing) {
         if (amount == 0) {
             revert CannotIncrementRewardPoolWithZeroAmount();
         }
@@ -143,13 +145,18 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         }
 
         uint256 nodeRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByNode(cycle, node);
-        uint256 userRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByUser(cycle, node, user);
+        uint256 userRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByUser(
+            cycle,
+            node,
+            user
+        );
 
         if (nodeRewardCycleStake == 0) {
             nodeRewardCycleStake = 1;
         }
 
-        uint256 claimAmount = rewardPools[node][cycle] * userRewardCycleStake / nodeRewardCycleStake;
+        uint256 claimAmount = (rewardPools[node][cycle] * userRewardCycleStake) /
+            nodeRewardCycleStake;
 
         if (user == node) {
             claimAmount += unclaimedNodeCommission[node];

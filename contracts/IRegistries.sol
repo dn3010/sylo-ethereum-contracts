@@ -31,6 +31,4 @@ interface IRegistries {
     ) external view returns (address[] memory, Registry[] memory);
 
     function getTotalNodes() external view returns (uint256);
-
-
 }
