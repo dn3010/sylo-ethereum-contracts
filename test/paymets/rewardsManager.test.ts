@@ -273,7 +273,7 @@ describe('Rewards Manager', () => {
 
   describe('Claiming', () => {
     beforeEach(async () => {
-      // set 100% of rewards to stakes for simplicity
+      // set 100% of rewards to stakees for simplicity
       await contracts.registries.setDefaultPayoutPercentage(100000);
 
       await contracts.stakingOrchestrator.setCapacityPenaltyFactor(1);
@@ -366,7 +366,7 @@ describe('Rewards Manager', () => {
       await testClaim(node1.getAddress(), node1, 1, rewardAmount / 2n);
     });
 
-    it('can claim as node and stake', async () => {
+    it('can claim as node and stakee', async () => {
       // 50% to stakers, and the rest to node
       await contracts.registries.setDefaultPayoutPercentage(50000);
 
@@ -382,6 +382,24 @@ describe('Rewards Manager', () => {
       await setTimeSinceStart(1000);
 
       await testClaim(node1.getAddress(), node1, 1, rewardAmount);
+    });
+
+    it('claim is distributed between nodes and stakers', async () => {
+      // 50% to stakers, and the rest to node
+      await contracts.registries.setDefaultPayoutPercentage(50000);
+
+      const user = await setupUser();
+
+      // user stakes against node
+      await setupStake(node1.getAddress(), user, 1000);
+
+      const rewardAmount = 100n;
+
+      await incrementRewardPool(node1, 1, rewardAmount);
+
+      await setTimeSinceStart(1000);
+
+      await testClaim(node1.getAddress(), user, 1, rewardAmount / 2n);
     });
 
     it('cannot claim zero amount', async () => {

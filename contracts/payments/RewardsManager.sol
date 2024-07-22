@@ -57,7 +57,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     error TicketingAddressCannotBeNil();
     error ProtocolTimeManagerAddressCannotBeNil();
     error StakingOrchestratorAddressCannotBeNil();
-    error CannotIncrementRewardPoolWithZeroNodeAddress();
     error CannotIncrementRewardPoolWithZeroAmount();
     error RewardForCycleAlreadyClaimed();
     error CannotGetClaimForUnfinishedCycle();
@@ -152,7 +151,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         );
 
         if (nodeRewardCycleStake == 0) {
-            nodeRewardCycleStake = 1;
+            return 0;
         }
 
         uint256 claimAmount = (rewardPools[node][cycle] * userRewardCycleStake) /
