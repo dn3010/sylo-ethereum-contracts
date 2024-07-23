@@ -70,7 +70,11 @@ contract SeekerStakingManager is
         NIL // No error
     }
 
-    function initialize(IERC721 _rootSeekers, ISeekerStatsOracle _oracle, IStakingOrchestrator _stakingOrchestrator) external initializer {
+    function initialize(
+        IERC721 _rootSeekers,
+        ISeekerStatsOracle _oracle,
+        IStakingOrchestrator _stakingOrchestrator
+    ) external initializer {
         if (address(_rootSeekers) == address(0)) {
             revert RootSeekersCannotBeZeroAddress();
         }

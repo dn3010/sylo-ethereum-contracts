@@ -56,11 +56,14 @@ contract SyloStakingManager is
     error CannotTransferMoreThanStaked(uint256 stakeAmount, uint256 transferAmount);
     error StakeNotYetUnlocked();
 
-    function initialize(IERC20 syloToken, IStakingOrchestrator stakingOrchestrator, uint256 _unlockDuration) external initializer {
+    function initialize(
+        IERC20 syloToken,
+        IStakingOrchestrator stakingOrchestrator,
+        uint256 _unlockDuration
+    ) external initializer {
         if (address(syloToken) == address(0)) {
             revert SyloAddressCannotBeNil();
         }
-
 
         Ownable2StepUpgradeable.__Ownable2Step_init();
 

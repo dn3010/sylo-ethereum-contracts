@@ -192,7 +192,13 @@ export async function deployContracts(
     ticketingOpts.ticketDuration,
   );
 
-  await rewardsManager.initialize(await registries.getAddress(), ticketing);
+  await rewardsManager.initialize(
+    syloToken.getAddress(),
+    registries.getAddress(),
+    protocolTimeManager.getAddress(),
+    ticketing.getAddress(),
+    stakingOrchestrator.getAddress(),
+  );
   await directory.initialize(
     await stakingOrchestrator.getAddress(),
     await protocolTimeManager.getAddress(),

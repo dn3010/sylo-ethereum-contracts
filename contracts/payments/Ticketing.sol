@@ -326,7 +326,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function _redeem(Ticket calldata ticket) internal {
-        uint256 rewardAmount = rewardRedeemer(ticket.cycle, ticket.sender, ticket.redeemer);
+        uint256 rewardAmount = rewardRedeemer(ticket.sender, ticket.redeemer);
 
         emit Redemption(
             ticket.cycle,
@@ -339,7 +339,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function _redeemMultiReceiver(MultiReceiverTicket calldata ticket, address receiver) internal {
-        uint256 rewardAmount = rewardRedeemer(ticket.cycle, ticket.sender, ticket.redeemer);
+        uint256 rewardAmount = rewardRedeemer(ticket.sender, ticket.redeemer);
 
         emit MultiReceiverRedemption(
             ticket.cycle,
@@ -351,11 +351,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         );
     }
 
-    function rewardRedeemer(
-        uint256 cycle,
-        address sender,
-        address redeemer
-    ) internal returns (uint256) {
+    function rewardRedeemer(address sender, address redeemer) internal returns (uint256) {
         IDeposits.Deposit memory deposit = _deposits.getDeposit(sender);
 
         uint256 amount;
@@ -363,12 +359,12 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         if (faceValue > deposit.escrow) {
             amount = deposit.escrow;
             _deposits.removePenalty(sender);
-            incrementRewardPool(sender, redeemer, cycle, amount);
+            incrementRewardPool(sender, redeemer, amount);
 
             emit SenderPenaltyBurnt(sender);
         } else {
             amount = faceValue;
-            incrementRewardPool(sender, redeemer, cycle, amount);
+            incrementRewardPool(sender, redeemer, amount);
         }
 
         return amount;
@@ -657,13 +653,8 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
             );
     }
 
-    function incrementRewardPool(
-        address sender,
-        address stakee,
-        uint256 cycle,
-        uint256 amount
-    ) internal {
+    function incrementRewardPool(address sender, address stakee, uint256 amount) internal {
         _deposits.spendEscrow(sender, amount);
-        _rewardsManager.incrementRewardPool(stakee, cycle, amount);
+        _rewardsManager.incrementRewardPool(stakee, amount);
     }
 }

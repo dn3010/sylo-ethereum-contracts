@@ -3,11 +3,13 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../libraries/SyloUtils.sol";
 
+import "../IProtocolTimeManager.sol";
+import "../IRegistries.sol";
+import "../staking/IStakingOrchestrator.sol";
 import "./IRewardsManager.sol";
-import "../Registries.sol";
-import "./Ticketing.sol";
 import "./ITicketing.sol";
 
 contract RewardsManager is IRewardsManager, Initializable, AccessControl {
@@ -17,15 +19,28 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      */
     bytes32 public constant onlyTicketing = keccak256("ONLY_TICKETING");
 
+    /** ERC20 Sylo token contract.*/
+    IERC20 public token;
+
     /**
      * @notice Registries contract
      */
-    Registries public registries;
+    IRegistries public registries;
+
+    /**
+     * @notice Protocol Time Manager contract
+     */
+    IProtocolTimeManager public protocolTimeManager;
+
+    /**
+     * @notice Staking Orchestrator contract
+     */
+    IStakingOrchestrator public stakingOrchestrator;
 
     /**
      * @notice Tracks claims from staker accounts
      */
-    mapping(address => mapping(address => uint256)) claims;
+    mapping(address => mapping(address => mapping(uint256 => bool))) claims;
 
     /**
      * @notice Tracks reward pools for each reward cycle
@@ -37,24 +52,43 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      */
     mapping(address => uint256) unclaimedNodeCommission;
 
+    error TokenAddressCannotBeNil();
     error RegistriesAddressCannotBeNil();
     error TicketingAddressCannotBeNil();
-    error CannotIncrementRewardPoolWithZeroNodeAddress();
+    error ProtocolTimeManagerAddressCannotBeNil();
+    error StakingOrchestratorAddressCannotBeNil();
     error CannotIncrementRewardPoolWithZeroAmount();
-    error CannotInitializeWithNonTicketing();
+    error RewardForCycleAlreadyClaimed();
+    error CannotGetClaimForUnfinishedCycle();
+    error CannotClaimZeroAmount();
 
-    function initialize(Registries _registries, Ticketing _ticketing) external initializer {
+    function initialize(
+        IERC20 _token,
+        IRegistries _registries,
+        IProtocolTimeManager _protocolTimeManager,
+        ITicketing _ticketing,
+        IStakingOrchestrator _stakingOrchestrator
+    ) external initializer {
+        if (address(_token) == address(0)) {
+            revert TokenAddressCannotBeNil();
+        }
         if (address(_registries) == address(0)) {
             revert RegistriesAddressCannotBeNil();
+        }
+        if (address(_protocolTimeManager) == address(0)) {
+            revert ProtocolTimeManagerAddressCannotBeNil();
         }
         if (address(_ticketing) == address(0)) {
             revert TicketingAddressCannotBeNil();
         }
-        if (!ERC165(address(_ticketing)).supportsInterface(type(ITicketing).interfaceId)) {
-            revert CannotInitializeWithNonTicketing();
+        if (address(_stakingOrchestrator) == address(0)) {
+            revert StakingOrchestratorAddressCannotBeNil();
         }
 
+        token = _token;
         registries = _registries;
+        protocolTimeManager = _protocolTimeManager;
+        stakingOrchestrator = _stakingOrchestrator;
 
         _grantRole(onlyTicketing, address(_ticketing));
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -74,22 +108,19 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      * @notice Increments a nodes reward pool. Callable only by the ticketing
      * contract when redeeming a ticket.
      * @param node Address of the node
-     * @param cycle Current reward cycle
      * @param amount Increment amount of reward pool
      */
-    function incrementRewardPool(
-        address node,
-        uint256 cycle,
-        uint256 amount
-    ) external onlyRole(onlyTicketing) {
+    function incrementRewardPool(address node, uint256 amount) external onlyRole(onlyTicketing) {
         if (amount == 0) {
             revert CannotIncrementRewardPoolWithZeroAmount();
         }
 
-        uint256 stakersReward = SyloUtils.percOf(amount, registries.defaultPayoutPercentage());
+        IProtocolTimeManager.Cycle memory currentCycle = protocolTimeManager.getCurrentCycle();
+
+        uint256 stakersReward = SyloUtils.percOf(amount, registries.getDefaultPayoutPercentage());
         uint256 nodesCommission = amount - stakersReward;
         unclaimedNodeCommission[node] += nodesCommission;
-        rewardPools[node][cycle] += stakersReward;
+        rewardPools[node][currentCycle.iteration] += stakersReward;
     }
 
     /**
@@ -99,6 +130,38 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      */
     function getRewardPool(address node, uint256 cycle) external view returns (uint256) {
         return rewardPools[node][cycle];
+    }
+
+    function getClaim(address node, address user, uint256 cycle) external view returns (uint256) {
+        return _getClaim(node, user, cycle);
+    }
+
+    function _getClaim(address node, address user, uint256 cycle) internal view returns (uint256) {
+        IProtocolTimeManager.Cycle memory currentCycle = protocolTimeManager.getCurrentCycle();
+
+        if (currentCycle.iteration <= cycle) {
+            revert CannotGetClaimForUnfinishedCycle();
+        }
+
+        uint256 nodeRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByNode(cycle, node);
+        uint256 userRewardCycleStake = stakingOrchestrator.getRewardCycleStakeByUser(
+            cycle,
+            node,
+            user
+        );
+
+        if (nodeRewardCycleStake == 0) {
+            return 0;
+        }
+
+        uint256 claimAmount = (rewardPools[node][cycle] * userRewardCycleStake) /
+            nodeRewardCycleStake;
+
+        if (user == node) {
+            claimAmount += unclaimedNodeCommission[node];
+        }
+
+        return claimAmount;
     }
 
     /**
@@ -132,6 +195,22 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
      * @param cycle Reward cycle to claim reward from
      */
     function claim(address node, uint256 cycle) external {
-        revert("not implemented");
+        if (claims[node][msg.sender][cycle]) {
+            revert RewardForCycleAlreadyClaimed();
+        }
+
+        uint256 claimAmount = _getClaim(node, msg.sender, cycle);
+
+        if (claimAmount == 0) {
+            revert CannotClaimZeroAmount();
+        }
+
+        SafeERC20.safeTransfer(token, msg.sender, claimAmount);
+
+        claims[node][msg.sender][cycle] = true;
+
+        if (msg.sender == node) {
+            unclaimedNodeCommission[node] = 0;
+        }
     }
 }

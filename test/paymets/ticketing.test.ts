@@ -1,7 +1,13 @@
 import { ethers } from 'hardhat';
 import { Wallet, BigNumberish, HDNodeWallet, Block } from 'ethers';
 import { SyloContracts } from '../../common/contracts';
-import { deployContracts, signatureTypes, getLatestBlock } from '../utils';
+import {
+  deployContracts,
+  signatureTypes,
+  getLatestBlock,
+  getTimeManagerUtil,
+  getInterfaceId,
+} from '../utils';
 import { ContractTransactionResponse, Signer } from 'ethers';
 import { expect } from 'chai';
 import {
@@ -39,6 +45,8 @@ describe('Ticketing', () => {
     sufficientEscrow = (await ticketing.faceValue()) + 100n;
     insufficientEscrow = (await ticketing.faceValue()) - 100n;
     penalty = 500n;
+
+    await getTimeManagerUtil(contracts.protocolTimeManager).startProtocol();
   });
 
   it('cannot initialize deposits with invalid arguments', async () => {
@@ -1173,6 +1181,25 @@ describe('Ticketing', () => {
     ).to.be.revertedWithCustomError(ticketing, 'TicketNotWinning');
   });
 
+  it('ticketing supports correct interfaces', async () => {
+    const abi = [
+      'function redeem((uint256,address,address,address,uint256,bytes32) calldata ticket,uint256 redeemerRand,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata senderSig,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata receiverSig) external',
+      'function redeemMultiReceiver((uint256,address,address,uint256,bytes32) calldata ticket,uint256 redeemerRand,address receiver,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata senderSig,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata receiverSig) external',
+    ];
+
+    const interfaceId = getInterfaceId(abi);
+
+    expect(await ticketing.supportsInterface(interfaceId)).to.equal(true);
+
+    const invalidAbi = ['function foo(uint256 duration) external'];
+
+    const invalidAbiInterfaceId = getInterfaceId(invalidAbi);
+
+    expect(await ticketing.supportsInterface(invalidAbiInterfaceId)).to.equal(
+      false,
+    );
+  });
+
   async function createTicket(
     cycle: number,
     sender: string,
@@ -1540,8 +1567,8 @@ export async function redeemTicket(
     redeemerRand: number;
     cycle: number;
   },
-  escrowAmount?: bigint,
-  penaltyAmount?: bigint,
+  escrowAmount?: BigNumberish,
+  penaltyAmount?: BigNumberish,
 ): Promise<void> {
   escrowAmount &&
     (await depositsContract

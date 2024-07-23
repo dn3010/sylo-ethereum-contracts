@@ -21,7 +21,14 @@ interface ISeekerStatsOracle {
 
     function registerSeeker(Seeker calldata seeker, bytes calldata proof) external;
 
-    function calculateAttributeCoverage(uint256 attrReactor , uint256 attrCores, uint256 attrDurability, uint256 attrSensors, uint256 attrStorage, uint256 attrChip) external view returns (int256);
+    function calculateAttributeCoverage(
+        uint256 attrReactor,
+        uint256 attrCores,
+        uint256 attrDurability,
+        uint256 attrSensors,
+        uint256 attrStorage,
+        uint256 attrChip
+    ) external view returns (int256);
 
     function isSeekerRegistered(uint256 seekerId) external view returns (bool);
 

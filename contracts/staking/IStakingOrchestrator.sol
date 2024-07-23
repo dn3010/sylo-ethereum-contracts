@@ -10,9 +10,16 @@ interface IStakingOrchestrator {
 
     function getUserStake(address node, address user) external view returns (uint256);
 
-    function getRewardCycleStakeByNode(uint256 cycle, address node) external view returns (uint256);
+    function getRewardCycleStakeByNode(
+        uint256 cycle,
+        address node
+    ) external view returns (uint256);
 
-    function getRewardCycleStakeByUser(uint256 cycle, address node, address user) external view returns (uint256);
+    function getRewardCycleStakeByUser(
+        uint256 cycle,
+        address node,
+        address user
+    ) external view returns (uint256);
 
     function syloStakeAdded(address node, address user, uint256 amount) external;
 

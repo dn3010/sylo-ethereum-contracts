@@ -17,6 +17,8 @@ interface IRegistries {
 
     function register(string calldata publicEndpoint) external;
 
+    function getDefaultPayoutPercentage() external view returns (uint32);
+
     function setDefaultPayoutPercentage(uint32 _defaultPayoutPercentage) external;
 
     function getRegistry(address account) external view returns (Registry memory);
