@@ -71,6 +71,24 @@ describe('Ticketing', () => {
     ).to.be.revertedWithCustomError(deposits, 'TokenAddressCannotBeNil');
   });
 
+  it('can get ticketing parameters', async () => {
+    const [
+      faceValue,
+      multiReceiverFaceValue,
+      baseLiveWinProb,
+      expiredWinProb,
+      ticketDuration,
+      decayRate,
+    ] = await ticketing.getTicketingParameters();
+
+    expect(faceValue).to.equal(1000n);
+    expect(multiReceiverFaceValue).to.equal(1000n);
+    expect(baseLiveWinProb).to.equal(2n ** 128n - 1n);
+    expect(expiredWinProb).to.equal(2n ** 128n - 1n);
+    expect(ticketDuration).to.equal(1000000n);
+    expect(decayRate).to.equal(80000n);
+  });
+
   it('can set ticketing parameters', async () => {
     const updateParam = async <P>(
       setter: (p: P) => Promise<ContractTransactionResponse>,
@@ -1185,6 +1203,7 @@ describe('Ticketing', () => {
     const abi = [
       'function redeem((uint256,address,address,address,uint256,bytes32) calldata ticket,uint256 redeemerRand,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata senderSig,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata receiverSig) external',
       'function redeemMultiReceiver((uint256,address,address,uint256,bytes32) calldata ticket,uint256 redeemerRand,address receiver,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata senderSig,(uint8,bytes,address,(address,uint256,bytes,string,string,string)) calldata receiverSig) external',
+      'function getTicketingParameters() external view returns (uint256,uint256,uint128,uint128,uint256,uint32)',
     ];
 
     const interfaceId = getInterfaceId(abi);

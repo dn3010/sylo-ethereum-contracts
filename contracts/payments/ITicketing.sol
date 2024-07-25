@@ -57,4 +57,15 @@ interface ITicketing {
         UserSignature calldata senderSig,
         UserSignature calldata receiverSig
     ) external;
+
+    function getTicketingParameters()
+        external view
+        returns (
+            uint256, // face value
+            uint256, // multi receiver face value
+            uint128, // base live win prob
+            uint128, // expired win prob
+            uint256, // ticket duration
+            uint32 // decayRate
+        );
 }

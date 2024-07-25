@@ -123,11 +123,7 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
             revert CannotJoinDirectoryWithZeroStake();
         }
 
-        if (
-            directories[currentRewardCycle.id][currentPeriod.id + 1].stakes[
-                msg.sender
-            ] > 0
-        ) {
+        if (directories[currentRewardCycle.id][currentPeriod.id + 1].stakes[msg.sender] > 0) {
             revert NodeAlreadyJoinedDirectory();
         }
 

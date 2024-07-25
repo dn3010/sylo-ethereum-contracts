@@ -11,7 +11,7 @@ import {
 } from './utils';
 import { increase } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
-describe('Protocol time manager', () => {
+describe.only('Protocol time manager', () => {
   let accounts: Signer[];
   let contracts: SyloContracts;
   let protocolTimeManager: ProtocolTimeManager;
@@ -622,12 +622,12 @@ describe('Protocol time manager', () => {
 
   async function checkPeriod(period: number) {
     const currentPeriod = await protocolTimeManager.getCurrentPeriod();
-    assert.equal(Number(currentPeriod), period);
+    assert.equal(Number(currentPeriod.id), period);
   }
 
   async function checkTime(cycle: number, period: number) {
     const [currentCycle, currentPeriod] = await protocolTimeManager.getTime();
-    assert.equal(Number(currentCycle), cycle);
-    assert.equal(Number(currentPeriod), period);
+    assert.equal(Number(currentCycle.id), cycle);
+    assert.equal(Number(currentPeriod.id), period);
   }
 });

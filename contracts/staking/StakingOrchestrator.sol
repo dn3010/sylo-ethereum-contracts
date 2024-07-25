@@ -564,9 +564,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
             }
         }
 
-        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][
-            cycle.id
-        ];
+        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][cycle.id];
 
         // first instance this user is updating stake this cycle
         if (userCycleStake.cycle == 0) {
@@ -617,9 +615,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         address user,
         IProtocolTimeManager.Cycle memory cycle
     ) internal {
-        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][
-            cycle.id
-        ];
+        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][cycle.id];
 
         userCycleStake.currentStakingCapacityAdjustedStake = _getRewardCycleStakeByUser(
             cycle.id,

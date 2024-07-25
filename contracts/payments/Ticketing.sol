@@ -657,4 +657,25 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         _deposits.spendEscrow(sender, amount);
         _rewardsManager.incrementRewardPool(stakee, amount);
     }
+
+    function getTicketingParameters()
+        external view
+        returns (
+            uint256, // face value
+            uint256, // multi receiver face value
+            uint128, // base live win prob
+            uint128, // expired win prob
+            uint256, // ticket duration
+            uint32 // decayRate
+        )
+    {
+        return (
+            faceValue,
+            multiReceiverFaceValue,
+            baseLiveWinProb,
+            expiredWinProb,
+            ticketDuration,
+            decayRate
+        );
+    }
 }
