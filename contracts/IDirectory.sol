@@ -29,9 +29,11 @@ interface IDirectory {
 
     function scanWithTime(
         uint128 point,
-        uint256 rewardCycleId,
-        uint256 stakingPeriodId
+        uint256 cycleId,
+        uint256 periodId
     ) external returns (address);
 
     function joinNextDirectory() external;
+
+    function getDirectoryStake(uint256 cycleId, uint256 periodId, address node) external view returns (uint256);
 }

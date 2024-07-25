@@ -11,7 +11,7 @@ import {
 } from './utils';
 import { increase } from '@nomicfoundation/hardhat-network-helpers/dist/src/helpers/time';
 
-describe.only('Protocol time manager', () => {
+describe('Protocol time manager', () => {
   let accounts: Signer[];
   let contracts: SyloContracts;
   let protocolTimeManager: ProtocolTimeManager;
