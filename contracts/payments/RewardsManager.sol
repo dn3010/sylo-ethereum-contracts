@@ -120,7 +120,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         uint256 stakersReward = SyloUtils.percOf(amount, registries.getDefaultPayoutPercentage());
         uint256 nodesCommission = amount - stakersReward;
         unclaimedNodeCommission[node] += nodesCommission;
-        rewardPools[node][currentCycle.iteration] += stakersReward;
+        rewardPools[node][currentCycle.id] += stakersReward;
     }
 
     /**
@@ -139,7 +139,7 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
     function _getClaim(address node, address user, uint256 cycle) internal view returns (uint256) {
         IProtocolTimeManager.Cycle memory currentCycle = protocolTimeManager.getCurrentCycle();
 
-        if (currentCycle.iteration <= cycle) {
+        if (currentCycle.id <= cycle) {
             revert CannotGetClaimForUnfinishedCycle();
         }
 

@@ -282,7 +282,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         }
 
         uint256 lastUpdate = 0;
-        for (uint256 i = currentCycle.iteration; i > 0; i--) {
+        for (uint256 i = currentCycle.id; i > 0; i--) {
             if (cycleStakesByNode[node][i].isUpdated) {
                 lastUpdate = i;
                 break;
@@ -526,7 +526,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         uint256 timestamp = block.timestamp;
         uint256 protocolStart = protocolTimeManager.getStart();
         if (protocolStart > block.timestamp) {
-            cycle.iteration = 1;
+            cycle.id = 1;
             cycle.start = protocolStart;
             // duration just needs to be non-zero to prevent division by zero
             cycle.duration = 1;
@@ -535,7 +535,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
             cycle = protocolTimeManager.getCurrentCycle();
         }
 
-        NodeCycleAdjustedStake storage nodeCycleStake = cycleStakesByNode[node][cycle.iteration];
+        NodeCycleAdjustedStake storage nodeCycleStake = cycleStakesByNode[node][cycle.id];
 
         // first time the node's stake is being updated this cycle
         if (!nodeCycleStake.isUpdated) {
@@ -549,7 +549,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
             // we have to backfill the cycle immediately after the last cycle
             // it was updated. This is to ensure the `getRewardCycleStakeByNode`
             // calculation remains accurate for every cycle as the node's stake changes.
-            for (uint256 i = cycle.iteration - 1; i > 0; --i) {
+            for (uint256 i = cycle.id - 1; i > 0; --i) {
                 NodeCycleAdjustedStake storage previousCycleStake = cycleStakesByNode[node][i];
 
                 if (!previousCycleStake.isUpdated) {
@@ -565,7 +565,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         }
 
         UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][
-            cycle.iteration
+            cycle.id
         ];
 
         // first instance this user is updating stake this cycle
@@ -618,16 +618,16 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         IProtocolTimeManager.Cycle memory cycle
     ) internal {
         UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][
-            cycle.iteration
+            cycle.id
         ];
 
         userCycleStake.currentStakingCapacityAdjustedStake = _getRewardCycleStakeByUser(
-            cycle.iteration,
+            cycle.id,
             node,
             user
         );
 
-        userCycleStake.cycle = cycle.iteration;
+        userCycleStake.cycle = cycle.id;
 
         // we also make the first staking update amount equal to the
         // user's current total stake

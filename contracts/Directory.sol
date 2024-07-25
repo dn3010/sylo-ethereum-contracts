@@ -52,12 +52,10 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
 
     function scan(uint128 point) external view returns (address) {
         (
-            ,
-            uint256 currentStakingPeriod,
             IProtocolTimeManager.Cycle memory cycle,
-
+            IProtocolTimeManager.Period memory period
         ) = protocolTimeManager.getTime();
-        return _scan(point, cycle.iteration, currentStakingPeriod);
+        return _scan(point, cycle.id, period.id);
     }
 
     function scanWithTime(
@@ -116,10 +114,8 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
 
     function joinNextDirectory() external {
         (
-            ,
-            uint256 currentStakingPeriod,
             IProtocolTimeManager.Cycle memory currentRewardCycle,
-            uint256 periodDuration
+            IProtocolTimeManager.Period memory currentPeriod
         ) = protocolTimeManager.getTime();
 
         uint256 nodeStake = stakingOrchestrator.getNodeStake(msg.sender);
@@ -128,7 +124,7 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
         }
 
         if (
-            directories[currentRewardCycle.iteration][currentStakingPeriod + 1].stakes[
+            directories[currentRewardCycle.id][currentPeriod.id + 1].stakes[
                 msg.sender
             ] > 0
         ) {
@@ -138,13 +134,13 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
         uint256 stakingPeriod = 0;
         uint256 rewardCycle;
         if (
-            !((block.timestamp + periodDuration) >=
+            !((block.timestamp + currentPeriod.duration) >=
                 (currentRewardCycle.start + currentRewardCycle.duration))
         ) {
-            stakingPeriod = currentStakingPeriod + 1;
-            rewardCycle = currentRewardCycle.iteration;
+            stakingPeriod = currentPeriod.id + 1;
+            rewardCycle = currentRewardCycle.id;
         } else {
-            rewardCycle = currentRewardCycle.iteration + 1;
+            rewardCycle = currentRewardCycle.id + 1;
         }
 
         uint256 nextBoundary = directories[rewardCycle][stakingPeriod].totalStake + nodeStake;

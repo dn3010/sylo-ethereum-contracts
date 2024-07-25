@@ -617,7 +617,7 @@ describe('Protocol time manager', () => {
 
   async function checkCycle(cycle: number) {
     const currentCycle = await protocolTimeManager.getCurrentCycle();
-    assert.equal(Number(currentCycle.iteration), cycle);
+    assert.equal(Number(currentCycle.id), cycle);
   }
 
   async function checkPeriod(period: number) {
