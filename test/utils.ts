@@ -152,6 +152,7 @@ export async function deployContracts(
   await stakingOrchestrator.initialize(
     protocolTimeManager.getAddress(),
     seekerStatsOracle.getAddress(),
+    syloStakingManager.getAddress(),
     stakingOrchestratorOpts.capacityCoverageMultiplier,
     stakingOrchestratorOpts.capacityPenaltyFactor,
   );
