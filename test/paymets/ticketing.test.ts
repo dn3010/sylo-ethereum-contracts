@@ -49,26 +49,93 @@ describe('Ticketing', () => {
     await getTimeManagerUtil(contracts.protocolTimeManager).startProtocol();
   });
 
-  it('cannot initialize deposits with invalid arguments', async () => {
+  it('cannot initialize ticketing with invalid arguments', async () => {
     const factory = await ethers.getContractFactory('Ticketing');
     const ticketingTemp = await factory.deploy();
 
-    await expect(
-      ticketingTemp.initialize(
-        ethers.ZeroAddress,
-        ethers.ZeroAddress,
-        ethers.ZeroAddress,
-        ethers.ZeroAddress,
-        ethers.ZeroAddress,
-        ethers.ZeroAddress,
-        1n,
-        1n,
-        1n,
-        1n,
-        1n,
-        1n,
-      ),
-    ).to.be.revertedWithCustomError(deposits, 'TokenAddressCannotBeNil');
+    const checkInitError = async function (
+      addresses: {
+        deposits: string;
+        registries: string;
+        rewardsManager: string;
+        authorizedAccounts: string;
+        futurepassRegistrar: string;
+      },
+      errorMessage: string,
+    ) {
+      await expect(
+        ticketingTemp.initialize(
+          addresses.deposits ? addresses.deposits : ethers.ZeroAddress,
+          addresses.registries ? addresses.registries : ethers.ZeroAddress,
+          addresses.rewardsManager
+            ? addresses.rewardsManager
+            : ethers.ZeroAddress,
+          addresses.authorizedAccounts
+            ? addresses.authorizedAccounts
+            : ethers.ZeroAddress,
+          addresses.futurepassRegistrar
+            ? addresses.futurepassRegistrar
+            : ethers.ZeroAddress,
+          1n,
+          1n,
+          1n,
+          1n,
+          1n,
+          1n,
+        ),
+      ).to.be.revertedWithCustomError(ticketing, errorMessage);
+    };
+
+    await checkInitError(
+      {
+        deposits: ethers.ZeroAddress,
+        registries: ethers.ZeroAddress,
+        rewardsManager: ethers.ZeroAddress,
+        authorizedAccounts: ethers.ZeroAddress,
+        futurepassRegistrar: ethers.ZeroAddress,
+      },
+      'DepositsAddressCannotBeNil',
+    );
+    await checkInitError(
+      {
+        deposits: await contracts.deposits.getAddress(),
+        registries: ethers.ZeroAddress,
+        rewardsManager: ethers.ZeroAddress,
+        authorizedAccounts: ethers.ZeroAddress,
+        futurepassRegistrar: ethers.ZeroAddress,
+      },
+      'RegistriesAddressCannotBeNil',
+    );
+    await checkInitError(
+      {
+        deposits: await contracts.deposits.getAddress(),
+        registries: await contracts.registries.getAddress(),
+        rewardsManager: ethers.ZeroAddress,
+        authorizedAccounts: ethers.ZeroAddress,
+        futurepassRegistrar: ethers.ZeroAddress,
+      },
+      'RewardsManagerAddressCannotBeNil',
+    );
+    await checkInitError(
+      {
+        deposits: await contracts.deposits.getAddress(),
+        registries: await contracts.registries.getAddress(),
+        rewardsManager: await contracts.rewardsManager.getAddress(),
+        authorizedAccounts: ethers.ZeroAddress,
+        futurepassRegistrar: ethers.ZeroAddress,
+      },
+      'AuthorizedAccountsAddressCannotBeNil',
+    );
+    await checkInitError(
+      {
+        deposits: await contracts.deposits.getAddress(),
+        registries: await contracts.registries.getAddress(),
+        rewardsManager: await contracts.rewardsManager.getAddress(),
+        authorizedAccounts: await contracts.authorizedAccounts.getAddress(),
+        futurepassRegistrar: ethers.ZeroAddress,
+      },
+      'FuturepassRegistrarAddressCannotBeNil',
+    );
   });
 
   it('can get ticketing parameters', async () => {
@@ -746,7 +813,10 @@ describe('Ticketing', () => {
         senderSig,
         senderSig,
       ),
-    ).to.be.revertedWithCustomError(ticketing, 'TicketCannotBeFromFutureBlock');
+    ).to.be.revertedWithCustomError(
+      ticketing,
+      'MultiReceiverTicketCannotBeFromFutureBlock',
+    );
   });
 
   it('cannot redeem multireceiver ticket with empty sender', async () => {
@@ -767,7 +837,7 @@ describe('Ticketing', () => {
       ),
     ).to.be.revertedWithCustomError(
       ticketing,
-      'TicketSenderCannotBeZeroAddress',
+      'MultiReceiverTicketSenderCannotBeZeroAddress',
     );
   });
 
@@ -789,7 +859,7 @@ describe('Ticketing', () => {
       ),
     ).to.be.revertedWithCustomError(
       ticketing,
-      'TicketReceiverCannotBeZeroAddress',
+      'MultiTicketReceiverCannotBeZeroAddress',
     );
   });
 
@@ -811,7 +881,7 @@ describe('Ticketing', () => {
       ),
     ).to.be.revertedWithCustomError(
       ticketing,
-      'TicketRedeemerCannotBeZeroAddress',
+      'MultiTicketRedeemerCannotBeZeroAddress',
     );
   });
 
@@ -904,7 +974,7 @@ describe('Ticketing', () => {
         senderSig,
         receiverSig,
       ),
-    ).to.be.revertedWithCustomError(ticketing, 'TicketNotWinning');
+    ).to.be.revertedWithCustomError(ticketing, 'MultiReceiverTicketNotWinning');
   });
 
   it('successfully redeems a multireceiver ticket', async () => {
@@ -1196,7 +1266,7 @@ describe('Ticketing', () => {
         senderSig,
         receiverSig,
       ),
-    ).to.be.revertedWithCustomError(ticketing, 'TicketNotWinning');
+    ).to.be.revertedWithCustomError(ticketing, 'MultiReceiverTicketNotWinning');
   });
 
   it('ticketing supports correct interfaces', async () => {

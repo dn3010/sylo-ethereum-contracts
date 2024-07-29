@@ -178,7 +178,6 @@ export async function deployContracts(
   );
 
   await ticketing.initialize(
-    syloToken.getAddress(),
     deposits.getAddress(),
     registries.getAddress(),
     rewardsManager.getAddress(),
