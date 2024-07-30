@@ -159,11 +159,6 @@ export async function deployContracts(
 
   await stakingOrchestrator.grantRole(
     await stakingOrchestrator.onlyStakingManager(),
-    syloStakingManager.getAddress(),
-  );
-
-  await stakingOrchestrator.grantRole(
-    await stakingOrchestrator.onlyStakingManager(),
     seekerStakingManager.getAddress(),
   );
 
