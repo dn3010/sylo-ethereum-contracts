@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 import "./IStakingOrchestrator.sol";
 import "../IProtocolTimeManager.sol";
+import "./sylo/ISyloStakingManager.sol";
 import "./seekers/ISeekerStatsOracle.sol";
 
 /**
@@ -195,19 +196,23 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
     /** errors **/
     error ProtocolTimeManagerAddressCannotBeNil();
     error SeekerStatsOracleAddressCannotBeNil();
+    error SyloStakingManagerAddressCannotBeNil();
 
     function initialize(
         IProtocolTimeManager _protocolTimeManager,
         ISeekerStatsOracle _seekerStatsOracle,
+        ISyloStakingManager _syloStakingManager,
         uint256 _capacityCoverageMultiplier,
         uint256 _capacityPenaltyFactor
     ) external initializer {
         if (address(_protocolTimeManager) == address(0)) {
             revert ProtocolTimeManagerAddressCannotBeNil();
         }
-
         if (address(_seekerStatsOracle) == address(0)) {
             revert SeekerStatsOracleAddressCannotBeNil();
+        }
+        if (address(_syloStakingManager) == address(0)) {
+            revert SyloStakingManagerAddressCannotBeNil();
         }
 
         protocolTimeManager = _protocolTimeManager;
@@ -218,6 +223,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(onlyOwner, msg.sender);
+        _grantRole(onlyStakingManager, address(_syloStakingManager));
     }
 
     function setCapacityCoverageMultiplier(
