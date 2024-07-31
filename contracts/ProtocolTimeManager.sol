@@ -412,11 +412,26 @@ contract ProtocolTimeManager is
     }
 
     /**
-     * @notice Get the cycle and period durations
+     * @notice Get the current cycle and period
      */
     function getTime() external view returns (Cycle memory, Period memory) {
         Cycle memory cycle = _getCurrentCycle();
         Period memory period = _getCurrentPeriod();
         return (cycle, period);
+    }
+
+    /**
+     * @notice Retrieves the next cycle and period ids.
+     */
+    function getNext() external view returns (uint256, uint256) {
+        Cycle memory cycle = _getCurrentCycle();
+        Period memory period = _getCurrentPeriod();
+
+        // The next increment in time will cause the cycle to roll over.
+        if (block.timestamp + period.duration > cycle.start + cycle.duration) {
+            return (cycle.id + 1, 0);
+        }
+
+        return (cycle.id, period.id + 1);
     }
 }

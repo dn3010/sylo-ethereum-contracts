@@ -569,6 +569,7 @@ describe('Protocol time manager', () => {
       'function getCycleDuration() external returns (uint256)',
       'function getPeriodDuration() external returns (uint256)',
       'function getTime() external returns (uint256, uint256, (uint256,uint256,uint256))',
+      'function getNext() external returns (uint256, uint256)',
       'function getCurrentCycle() external returns ((uint256,uint256,uint256))',
       'function getCurrentPeriod() external returns (uint256)',
       'function getStart() external view returns (uint256)',
