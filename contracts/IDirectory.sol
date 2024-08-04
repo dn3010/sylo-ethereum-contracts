@@ -14,7 +14,7 @@ interface IDirectory {
     }
 
     /**
-     * @dev An EpochDirectory will be stored for every period. The
+     * @dev A Directory will be stored for every period. The
      * directory will be constructed piece by piece as Nodes join,
      * each adding their own directory entry based on their current
      * stake value.
