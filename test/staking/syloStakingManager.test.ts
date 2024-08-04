@@ -16,8 +16,10 @@ describe('Sylo Staking', () => {
     contracts = await deployContracts();
     syloStakingManager = contracts.syloStakingManager;
 
-    const { startProtocol } = getTimeManagerUtil(contracts.protocolTimeManager);
-    await startProtocol();
+    const { setProtocolStartIn } = getTimeManagerUtil(
+      contracts.protocolTimeManager,
+    );
+    await setProtocolStartIn(1000);
   });
 
   it('cannot initialize sylo staking manager with invalid arguemnts', async () => {

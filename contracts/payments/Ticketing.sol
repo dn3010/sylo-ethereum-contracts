@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.18;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts/utils/introspection/ERC165.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
@@ -25,30 +23,27 @@ import "../staking/sylo/ISyloStakingManager.sol";
  * Event Relay service.
  */
 contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165 {
-    /** ERC20 Sylo token contract.*/
-    IERC20 public _token;
-
     /** Sylo Depoists contract */
-    IDeposits public _deposits;
+    IDeposits public deposits;
 
     /** Sylo Registries contract */
-    IRegistries public _registries;
+    IRegistries public registries;
 
     /** Sylo Staking Manager contract */
-    ISyloStakingManager public _stakingManager;
+    ISyloStakingManager public stakingManager;
 
     /** Rewards Manager contract */
-    IRewardsManager public _rewardsManager;
+    IRewardsManager public rewardsManager;
 
     /**
      * @notice Sylo Authorized Accounts.
      */
-    IAuthorizedAccounts public _authorizedAccounts;
+    IAuthorizedAccounts public authorizedAccounts;
 
     /**
      * @notice Futurepass Registrar Pre-compile.
      */
-    IFuturepassRegistrar public _futurepassRegistrar;
+    IFuturepassRegistrar public futurepassRegistrar;
 
     /** @notice The value of a winning ticket in SOLO. */
     uint256 public faceValue;
@@ -93,6 +88,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     /** @notice Mapping of ticket hashes, used to check if a ticket has been redeemed */
     mapping(bytes32 => bool) public usedTickets;
 
+    /** Ticketing Parameter events */
     event FaceValueUpdated(uint256 faceValue);
     event BaseLiveWinProbUpdated(uint128 baseLiveWinprob);
     event ExpiredWinProbUpdated(uint128 expiredWinProb);
@@ -100,6 +96,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     event DecayRateUpdated(uint32 decayRate);
     event MultiReceiverFaceValueUpdated(uint256 multiReceiverFaceValue);
 
+    /** Ticketing Redemption events */
     event SenderPenaltyBurnt(address sender);
     event Redemption(
         uint256 indexed cycle,
@@ -118,32 +115,45 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         uint256 amount
     );
 
+    /** Initialisation errors */
+    error DepositsAddressCannotBeNil();
+    error RegistriesAddressCannotBeNil();
+    error RewardsManagerAddressCannotBeNil();
+    error AuthorizedAccountsAddressCannotBeNil();
+    error FuturepassRegistrarAddressCannotBeNil();
+
+    /** OneToOne Ticketing errors */
     error FaceValueCannotBeZero();
-    error MultiReceiverFaceValueCannotBeZero();
-    error TicketDurationCannotBeZero();
-    error InvalidSigningPermission();
-    error SenderCannotUseAttachedAuthorizedAccount();
     error TicketNotWinning();
-    error MissingFuturepassAccount(address receiver);
-    error TicketAlreadyUsed();
-    error TicketEpochNotFound();
     error TicketAlreadyRedeemed();
-    error MultiReceiverTicketAlreadyRedeemed();
-    error RedeemerCommitMismatch();
-    error InvalidSignature();
-    error TokenAddressCannotBeNil();
     error TicketCannotBeFromFutureBlock();
     error TicketSenderCannotBeZeroAddress();
     error TicketReceiverCannotBeZeroAddress();
     error TicketRedeemerCannotBeZeroAddress();
 
+    /** MultiReceiver Ticketing errors */
+    error MultiReceiverFaceValueCannotBeZero();
+    error MultiReceiverTicketNotWinning();
+    error MultiReceiverTicketAlreadyRedeemed();
+    error MultiReceiverTicketCannotBeFromFutureBlock();
+    error MultiReceiverTicketSenderCannotBeZeroAddress();
+    error MultiTicketReceiverCannotBeZeroAddress();
+    error MultiTicketRedeemerCannotBeZeroAddress();
+
+    /** erros */
+    error TicketDurationCannotBeZero();
+    error InvalidSigningPermission();
+    error SenderCannotUseAttachedAuthorizedAccount();
+    error MissingFuturepassAccount(address receiver);
+    error RedeemerCommitMismatch();
+    error InvalidSignature();
+
     function initialize(
-        IERC20 token,
-        IDeposits deposits,
-        IRegistries registries,
-        IRewardsManager rewardsManager,
-        IAuthorizedAccounts authorizedAccounts,
-        IFuturepassRegistrar futurepassRegistrar,
+        IDeposits _deposits,
+        IRegistries _registries,
+        IRewardsManager _rewardsManager,
+        IAuthorizedAccounts _authorizedAccounts,
+        IFuturepassRegistrar _futurepassRegistrar,
         uint256 _faceValue,
         uint256 _multiReceiverFaceValue,
         uint128 _baseLiveWinProb,
@@ -151,18 +161,29 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         uint32 _decayRate,
         uint256 _ticketDuration
     ) external initializer {
-        if (address(token) == address(0)) {
-            revert TokenAddressCannotBeNil();
+        if (address(_deposits) == address(0)) {
+            revert DepositsAddressCannotBeNil();
+        }
+        if (address(_registries) == address(0)) {
+            revert RegistriesAddressCannotBeNil();
+        }
+        if (address(_rewardsManager) == address(0)) {
+            revert RewardsManagerAddressCannotBeNil();
+        }
+        if (address(_authorizedAccounts) == address(0)) {
+            revert AuthorizedAccountsAddressCannotBeNil();
+        }
+        if (address(_futurepassRegistrar) == address(0)) {
+            revert FuturepassRegistrarAddressCannotBeNil();
         }
 
         Ownable2StepUpgradeable.__Ownable2Step_init();
 
-        _token = token;
-        _deposits = deposits;
-        _registries = registries;
-        _rewardsManager = rewardsManager;
-        _authorizedAccounts = authorizedAccounts;
-        _futurepassRegistrar = futurepassRegistrar;
+        deposits = _deposits;
+        registries = _registries;
+        rewardsManager = _rewardsManager;
+        authorizedAccounts = _authorizedAccounts;
+        futurepassRegistrar = _futurepassRegistrar;
 
         faceValue = _faceValue;
         multiReceiverFaceValue = _multiReceiverFaceValue;
@@ -309,7 +330,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         UserSignature calldata receiverSig
     ) external {
         if (ticket.generationBlock > block.number) {
-            revert TicketCannotBeFromFutureBlock();
+            revert MultiReceiverTicketCannotBeFromFutureBlock();
         }
 
         (, bytes32 ticketReceiverHash) = requireValidWinningMultiReceiverTicket(
@@ -352,13 +373,13 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function rewardRedeemer(address sender, address redeemer) internal returns (uint256) {
-        IDeposits.Deposit memory deposit = _deposits.getDeposit(sender);
+        IDeposits.Deposit memory deposit = deposits.getDeposit(sender);
 
         uint256 amount;
 
         if (faceValue > deposit.escrow) {
             amount = deposit.escrow;
-            _deposits.removePenalty(sender);
+            deposits.removePenalty(sender);
             incrementRewardPool(sender, redeemer, amount);
 
             emit SenderPenaltyBurnt(sender);
@@ -457,16 +478,16 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         UserSignature memory receiverSig
     ) public view returns (bytes32 ticketHash, bytes32 ticketReceiverHash) {
         if (ticket.sender == address(0)) {
-            revert TicketSenderCannotBeZeroAddress();
+            revert MultiReceiverTicketSenderCannotBeZeroAddress();
         }
         if (receiver == address(0)) {
-            revert TicketReceiverCannotBeZeroAddress();
+            revert MultiTicketReceiverCannotBeZeroAddress();
         }
         if (ticket.redeemer == address(0)) {
-            revert TicketRedeemerCannotBeZeroAddress();
+            revert MultiTicketRedeemerCannotBeZeroAddress();
         }
 
-        address futurepassAccount = _futurepassRegistrar.futurepassOf(receiver);
+        address futurepassAccount = futurepassRegistrar.futurepassOf(receiver);
         if (futurepassAccount == address(0)) {
             revert MissingFuturepassAccount(receiver);
         }
@@ -504,7 +525,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
                 redeemerRand
             )
         ) {
-            revert TicketNotWinning();
+            revert MultiReceiverTicketNotWinning();
         }
 
         return (ticketHash, ticketReceiverHash);
@@ -516,8 +537,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
         uint256 generationBlock
     ) internal view returns (bool) {
         IAuthorizedAccounts.Permission permission = IAuthorizedAccounts.Permission.PersonalSign;
-        return
-            _authorizedAccounts.validatePermission(main, delegated, permission, generationBlock);
+        return authorizedAccounts.validatePermission(main, delegated, permission, generationBlock);
     }
 
     function createCommit(uint256 generationBlock, uint256 rand) public pure returns (bytes32) {
@@ -543,7 +563,7 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
                 revert InvalidSignature();
             }
         } else if (sig.sigType == SignatureType.AttachedAuthorized) {
-            _authorizedAccounts.validateAttachedAuthorizedAccount(
+            authorizedAccounts.validateAttachedAuthorizedAccount(
                 main,
                 sig.attachedAuthorizedAccount
             );
@@ -654,7 +674,29 @@ contract Ticketing is ITicketing, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function incrementRewardPool(address sender, address stakee, uint256 amount) internal {
-        _deposits.spendEscrow(sender, amount);
-        _rewardsManager.incrementRewardPool(stakee, amount);
+        deposits.spendEscrow(sender, amount);
+        rewardsManager.incrementRewardPool(stakee, amount);
+    }
+
+    function getTicketingParameters()
+        external
+        view
+        returns (
+            uint256, // face value
+            uint256, // multi receiver face value
+            uint128, // base live win prob
+            uint128, // expired win prob
+            uint256, // ticket duration
+            uint32 // decayRate
+        )
+    {
+        return (
+            faceValue,
+            multiReceiverFaceValue,
+            baseLiveWinProb,
+            expiredWinProb,
+            ticketDuration,
+            decayRate
+        );
     }
 }

@@ -152,13 +152,9 @@ export async function deployContracts(
   await stakingOrchestrator.initialize(
     protocolTimeManager.getAddress(),
     seekerStatsOracle.getAddress(),
+    syloStakingManager.getAddress(),
     stakingOrchestratorOpts.capacityCoverageMultiplier,
     stakingOrchestratorOpts.capacityPenaltyFactor,
-  );
-
-  await stakingOrchestrator.grantRole(
-    await stakingOrchestrator.onlyStakingManager(),
-    syloStakingManager.getAddress(),
   );
 
   await stakingOrchestrator.grantRole(
@@ -178,7 +174,6 @@ export async function deployContracts(
   );
 
   await ticketing.initialize(
-    syloToken.getAddress(),
     deposits.getAddress(),
     registries.getAddress(),
     rewardsManager.getAddress(),

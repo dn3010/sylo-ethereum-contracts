@@ -8,6 +8,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 import "./IStakingOrchestrator.sol";
 import "../IProtocolTimeManager.sol";
+import "./sylo/ISyloStakingManager.sol";
 import "./seekers/ISeekerStatsOracle.sol";
 
 /**
@@ -195,19 +196,23 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
     /** errors **/
     error ProtocolTimeManagerAddressCannotBeNil();
     error SeekerStatsOracleAddressCannotBeNil();
+    error SyloStakingManagerAddressCannotBeNil();
 
     function initialize(
         IProtocolTimeManager _protocolTimeManager,
         ISeekerStatsOracle _seekerStatsOracle,
+        ISyloStakingManager _syloStakingManager,
         uint256 _capacityCoverageMultiplier,
         uint256 _capacityPenaltyFactor
     ) external initializer {
         if (address(_protocolTimeManager) == address(0)) {
             revert ProtocolTimeManagerAddressCannotBeNil();
         }
-
         if (address(_seekerStatsOracle) == address(0)) {
             revert SeekerStatsOracleAddressCannotBeNil();
+        }
+        if (address(_syloStakingManager) == address(0)) {
+            revert SyloStakingManagerAddressCannotBeNil();
         }
 
         protocolTimeManager = _protocolTimeManager;
@@ -218,6 +223,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
 
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(onlyOwner, msg.sender);
+        _grantRole(onlyStakingManager, address(_syloStakingManager));
     }
 
     function setCapacityCoverageMultiplier(
@@ -282,7 +288,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         }
 
         uint256 lastUpdate = 0;
-        for (uint256 i = currentCycle.iteration; i > 0; i--) {
+        for (uint256 i = currentCycle.id; i > 0; i--) {
             if (cycleStakesByNode[node][i].isUpdated) {
                 lastUpdate = i;
                 break;
@@ -526,7 +532,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         uint256 timestamp = block.timestamp;
         uint256 protocolStart = protocolTimeManager.getStart();
         if (protocolStart > block.timestamp) {
-            cycle.iteration = 1;
+            cycle.id = 1;
             cycle.start = protocolStart;
             // duration just needs to be non-zero to prevent division by zero
             cycle.duration = 1;
@@ -535,7 +541,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
             cycle = protocolTimeManager.getCurrentCycle();
         }
 
-        NodeCycleAdjustedStake storage nodeCycleStake = cycleStakesByNode[node][cycle.iteration];
+        NodeCycleAdjustedStake storage nodeCycleStake = cycleStakesByNode[node][cycle.id];
 
         // first time the node's stake is being updated this cycle
         if (!nodeCycleStake.isUpdated) {
@@ -549,7 +555,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
             // we have to backfill the cycle immediately after the last cycle
             // it was updated. This is to ensure the `getRewardCycleStakeByNode`
             // calculation remains accurate for every cycle as the node's stake changes.
-            for (uint256 i = cycle.iteration - 1; i > 0; --i) {
+            for (uint256 i = cycle.id - 1; i > 0; --i) {
                 NodeCycleAdjustedStake storage previousCycleStake = cycleStakesByNode[node][i];
 
                 if (!previousCycleStake.isUpdated) {
@@ -564,9 +570,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
             }
         }
 
-        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][
-            cycle.iteration
-        ];
+        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][cycle.id];
 
         // first instance this user is updating stake this cycle
         if (userCycleStake.cycle == 0) {
@@ -617,17 +621,15 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         address user,
         IProtocolTimeManager.Cycle memory cycle
     ) internal {
-        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][
-            cycle.iteration
-        ];
+        UserCycleAdjustedStake storage userCycleStake = cycleStakesByUser[node][user][cycle.id];
 
         userCycleStake.currentStakingCapacityAdjustedStake = _getRewardCycleStakeByUser(
-            cycle.iteration,
+            cycle.id,
             node,
             user
         );
 
-        userCycleStake.cycle = cycle.iteration;
+        userCycleStake.cycle = cycle.id;
 
         // we also make the first staking update amount equal to the
         // user's current total stake

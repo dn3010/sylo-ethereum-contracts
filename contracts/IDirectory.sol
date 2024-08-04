@@ -14,7 +14,7 @@ interface IDirectory {
     }
 
     /**
-     * @dev An EpochDirectory will be stored for every period. The
+     * @dev A Directory will be stored for every period. The
      * directory will be constructed piece by piece as Nodes join,
      * each adding their own directory entry based on their current
      * stake value.
@@ -29,9 +29,11 @@ interface IDirectory {
 
     function scanWithTime(
         uint128 point,
-        uint256 rewardCycleId,
-        uint256 stakingPeriodId
+        uint256 cycleId,
+        uint256 periodId
     ) external returns (address);
 
     function joinNextDirectory() external;
+
+    function getDirectoryStake(uint256 cycleId, uint256 periodId, address node) external view returns (uint256);
 }

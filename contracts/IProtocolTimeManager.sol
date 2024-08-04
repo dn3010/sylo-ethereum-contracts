@@ -3,7 +3,13 @@ pragma solidity ^0.8.18;
 
 interface IProtocolTimeManager {
     struct Cycle {
-        uint256 iteration;
+        uint256 id;
+        uint256 start;
+        uint256 duration;
+    }
+
+    struct Period {
+        uint256 id;
         uint256 start;
         uint256 duration;
     }
@@ -18,11 +24,13 @@ interface IProtocolTimeManager {
 
     function getPeriodDuration() external returns (uint256);
 
-    function getTime() external view returns (uint256, uint256, Cycle memory, uint256);
+    function getTime() external view returns (Cycle memory, Period memory);
+
+    function getNext() external view returns (uint256, uint256);
 
     function getCurrentCycle() external view returns (Cycle memory);
 
-    function getCurrentPeriod() external view returns (uint256);
+    function getCurrentPeriod() external view returns (Period memory);
 
     function getStart() external view returns (uint256);
 }

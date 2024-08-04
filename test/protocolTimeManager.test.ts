@@ -569,6 +569,7 @@ describe('Protocol time manager', () => {
       'function getCycleDuration() external returns (uint256)',
       'function getPeriodDuration() external returns (uint256)',
       'function getTime() external returns (uint256, uint256, (uint256,uint256,uint256))',
+      'function getNext() external returns (uint256, uint256)',
       'function getCurrentCycle() external returns ((uint256,uint256,uint256))',
       'function getCurrentPeriod() external returns (uint256)',
       'function getStart() external view returns (uint256)',
@@ -617,17 +618,17 @@ describe('Protocol time manager', () => {
 
   async function checkCycle(cycle: number) {
     const currentCycle = await protocolTimeManager.getCurrentCycle();
-    assert.equal(Number(currentCycle.iteration), cycle);
+    assert.equal(Number(currentCycle.id), cycle);
   }
 
   async function checkPeriod(period: number) {
     const currentPeriod = await protocolTimeManager.getCurrentPeriod();
-    assert.equal(Number(currentPeriod), period);
+    assert.equal(Number(currentPeriod.id), period);
   }
 
   async function checkTime(cycle: number, period: number) {
     const [currentCycle, currentPeriod] = await protocolTimeManager.getTime();
-    assert.equal(Number(currentCycle), cycle);
-    assert.equal(Number(currentPeriod), period);
+    assert.equal(Number(currentCycle.id), cycle);
+    assert.equal(Number(currentPeriod.id), period);
   }
 });

@@ -58,6 +58,7 @@ describe('Staking Orchestrator', () => {
       stakingOrchestrator.initialize(
         ethers.ZeroAddress,
         accounts[0].getAddress(),
+        ethers.ZeroAddress,
         0,
         0,
       ),
@@ -68,7 +69,8 @@ describe('Staking Orchestrator', () => {
 
     await expect(
       stakingOrchestrator.initialize(
-        accounts[0].getAddress(),
+        contracts.protocolTimeManager.getAddress(),
+        ethers.ZeroAddress,
         ethers.ZeroAddress,
         0,
         0,
@@ -77,6 +79,19 @@ describe('Staking Orchestrator', () => {
       stakingOrchestrator,
       'SeekerStatsOracleAddressCannotBeNil',
     );
+
+    await expect(
+      stakingOrchestrator.initialize(
+        contracts.protocolTimeManager.getAddress(),
+        accounts[0].getAddress(),
+        ethers.ZeroAddress,
+        0,
+        0,
+      ),
+    ).to.be.revertedWithCustomError(
+      stakingOrchestrator,
+      'SyloStakingManagerAddressCannotBeNil',
+    );
   });
 
   it('cannot initialize staking orchestrator more than once', async () => {
@@ -84,6 +99,7 @@ describe('Staking Orchestrator', () => {
       stakingOrchestrator.initialize(
         contracts.protocolTimeManager.getAddress(),
         contracts.seekerStatsOracle.getAddress(),
+        contracts.syloStakingManager.getAddress(),
         1,
         1,
       ),

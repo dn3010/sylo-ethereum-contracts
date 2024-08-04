@@ -38,6 +38,8 @@ describe('Directory', () => {
       await stakingOrchestator.onlyStakingManager(),
       accounts[0].getAddress(),
     );
+
+    await stakingOrchestator.setCapacityPenaltyFactor(1);
   });
 
   it('cannot initialize directory more than once', async () => {
@@ -101,6 +103,8 @@ describe('Directory', () => {
     await stakingOrchestator.syloStakeAdded(nodeOne, ethers.ZeroAddress, 1000);
     await directory.connect(nodeOne).joinNextDirectory();
     await setTimeSinceStart(110);
+
+    expect(await directory.getDirectoryStake(1, 1, nodeOne)).to.equal(1000n);
 
     await testScan(BigInt(0), await nodeOne.getAddress());
   });
@@ -652,6 +656,7 @@ describe('Directory', () => {
       'function scan(uint128 point) external returns (address)',
       'function scanWithTime(uint128 point, uint256 rewardCycleId, uint256 stakingPeriodId) external returns (address)',
       'function joinNextDirectory() external',
+      'function getDirectoryStake(uint256 cycle, uint256 period, address node) external view returns (uint256)',
     ];
 
     const interfaceId = getInterfaceId(abi);

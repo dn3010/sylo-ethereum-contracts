@@ -186,7 +186,7 @@ contract ProtocolTimeManager is
         }
 
         Cycle memory cycle = _getCurrentCycle();
-        uint256 nextCycle = cycle.iteration + 1;
+        uint256 nextCycle = cycle.id + 1;
 
         // Check if the next cycle's period duration has already been updated. In this
         // case we overwrite the existing update
@@ -208,7 +208,7 @@ contract ProtocolTimeManager is
     /**
      * @notice Get the current period
      */
-    function getCurrentPeriod() external view returns (uint256) {
+    function getCurrentPeriod() external view returns (Period memory) {
         return _getCurrentPeriod();
     }
 
@@ -311,17 +311,19 @@ contract ProtocolTimeManager is
      * ongoing cycle, by the current period duration.
      * @return uint256 The current period within the ongoing cycle.
      */
-    function _getCurrentPeriod() internal view returns (uint256) {
+    function _getCurrentPeriod() internal view returns (Period memory) {
         if (!hasProtocolStarted()) {
             revert ProtocolHasNotBegun();
         }
 
         Cycle memory cycle = _getCurrentCycle();
-        uint256 totalTimeElapsedWithinPeriod = block.timestamp - cycle.start;
+        uint256 totalTimeElapsedWithinCycle = block.timestamp - cycle.start;
 
         uint256 periodDuration = _getPeriodDuration();
+        uint256 periodId = totalTimeElapsedWithinCycle / periodDuration;
+        uint256 periodStart = cycle.start + periodDuration * periodId;
 
-        return totalTimeElapsedWithinPeriod / periodDuration;
+        return Period(periodId, periodStart, periodDuration);
     }
 
     /**
@@ -393,7 +395,7 @@ contract ProtocolTimeManager is
 
         // if the last update occurred before the current cycle, then the
         // last update holds the current duration
-        if (lastUpdate.updatesAt <= cycle.iteration) {
+        if (lastUpdate.updatesAt <= cycle.id) {
             return lastUpdate.duration;
             // else the duration has been updated for the next cycle, so the current
             // period duration is defined in the previous update
@@ -410,12 +412,26 @@ contract ProtocolTimeManager is
     }
 
     /**
-     * @notice Get the cycle and period durations
+     * @notice Get the current cycle and period
      */
-    function getTime() external view returns (uint256, uint256, Cycle memory, uint256) {
+    function getTime() external view returns (Cycle memory, Period memory) {
         Cycle memory cycle = _getCurrentCycle();
-        uint256 period = _getCurrentPeriod();
-        uint256 periodDuration = _getPeriodDuration();
-        return (cycle.iteration, period, cycle, periodDuration);
+        Period memory period = _getCurrentPeriod();
+        return (cycle, period);
+    }
+
+    /**
+     * @notice Retrieves the next cycle and period ids.
+     */
+    function getNext() external view returns (uint256, uint256) {
+        Cycle memory cycle = _getCurrentCycle();
+        Period memory period = _getCurrentPeriod();
+
+        // The next increment in time will cause the cycle to roll over.
+        if (block.timestamp + period.duration > cycle.start + cycle.duration) {
+            return (cycle.id + 1, 0);
+        }
+
+        return (cycle.id, period.id + 1);
     }
 }
