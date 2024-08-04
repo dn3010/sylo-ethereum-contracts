@@ -317,10 +317,10 @@ contract ProtocolTimeManager is
         }
 
         Cycle memory cycle = _getCurrentCycle();
-        uint256 totalTimeElapsedWithinPeriod = block.timestamp - cycle.start;
+        uint256 totalTimeElapsedWithinCycle = block.timestamp - cycle.start;
 
         uint256 periodDuration = _getPeriodDuration();
-        uint256 periodId = totalTimeElapsedWithinPeriod / periodDuration;
+        uint256 periodId = totalTimeElapsedWithinCycle / periodDuration;
         uint256 periodStart = cycle.start + periodDuration * periodId;
 
         return Period(periodId, periodStart, periodDuration);
