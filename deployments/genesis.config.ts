@@ -130,7 +130,7 @@ const PorciniDevParameters: ContractParameters = {
 
   EpochsManager: {
     initialEpoch: 0,
-    epochDuration: 720, // 1 hour
+    epochDuration: 360, // 4 minutes
   },
 
   Registries: {
