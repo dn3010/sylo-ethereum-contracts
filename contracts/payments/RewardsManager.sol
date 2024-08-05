@@ -132,6 +132,28 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         return rewardPools[node][cycle];
     }
 
+    function getUnclaimedReward(address node, address user, uint256 cycle) external view returns (uint256) {
+        return _getUnclaimedReward(node, user, cycle);
+    }
+
+    function _getUnclaimedReward(address node, address user, uint256 cycle) internal view returns (uint256) {
+        if (claims[node][user][cycle]) {
+            return 0;
+        }
+
+        return _getClaim(node, user, cycle);
+    }
+
+    function getUnclaimedRewards(address node, address user, uint256[] calldata cycles) external view returns (uint256[] memory) {
+        uint256 [] memory unclaimedRewards = new uint256[](cycles.length);
+
+        for (uint256 i = 0; i < cycles.length; i++) {
+            unclaimedRewards[i] = _getUnclaimedReward(node, user, cycles[i]);
+        }
+
+        return unclaimedRewards;
+    }
+
     function getClaim(address node, address user, uint256 cycle) external view returns (uint256) {
         return _getClaim(node, user, cycle);
     }
@@ -156,10 +178,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
 
         uint256 claimAmount = (rewardPools[node][cycle] * userRewardCycleStake) /
             nodeRewardCycleStake;
-
-        if (user == node) {
-            claimAmount += unclaimedNodeCommission[node];
-        }
 
         return claimAmount;
     }
@@ -200,6 +218,10 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         }
 
         uint256 claimAmount = _getClaim(node, msg.sender, cycle);
+
+        if (msg.sender == node) {
+            claimAmount += unclaimedNodeCommission[node];
+        }
 
         if (claimAmount == 0) {
             revert CannotClaimZeroAmount();
