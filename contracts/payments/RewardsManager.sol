@@ -136,14 +136,6 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         return _getUnclaimedReward(node, user, cycle);
     }
 
-    function _getUnclaimedReward(address node, address user, uint256 cycle) internal view returns (uint256) {
-        if (claims[node][user][cycle]) {
-            return 0;
-        }
-
-        return _getClaim(node, user, cycle);
-    }
-
     function getUnclaimedRewards(address node, address user, uint256[] calldata cycles) external view returns (uint256[] memory) {
         uint256 [] memory unclaimedRewards = new uint256[](cycles.length);
 
@@ -152,6 +144,14 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         }
 
         return unclaimedRewards;
+    }
+
+    function _getUnclaimedReward(address node, address user, uint256 cycle) internal view returns (uint256) {
+        if (claims[node][user][cycle]) {
+            return 0;
+        }
+
+        return _getClaim(node, user, cycle);
     }
 
     function getClaim(address node, address user, uint256 cycle) external view returns (uint256) {
