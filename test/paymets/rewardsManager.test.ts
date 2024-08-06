@@ -244,6 +244,9 @@ describe('Rewards Manager', () => {
       'function getUnclaimedNodeCommission(address node) external view returns (uint256)',
       'function incrementRewardPool(address node, uint256 amount) external',
       'function claim(address node, uint256 cycle) external',
+      'function getClaim(address node, address user, uint256 cycle) external view returns (uint256)',
+      'function getUnclaimedReward(address node, address user, uint256 cycle) external view returns (uint256)',
+      'function getUnclaimedRewards(address node, address user, uint256[] cycles) external view returns (uint256[])',
     ];
 
     const interfaceId = getInterfaceId(abi);
@@ -291,6 +294,14 @@ describe('Rewards Manager', () => {
       await setTimeSinceStart(1000);
 
       await testClaim(node1.getAddress(), user, 1, rewardAmount);
+
+      const unclaimedReward = await rewardsManager.getUnclaimedReward(
+        node1.getAddress(),
+        user.address,
+        1,
+      );
+
+      expect(unclaimedReward).to.equal(0);
     });
 
     it('can claim reward over multiple cycles', async () => {
@@ -306,6 +317,16 @@ describe('Rewards Manager', () => {
         await incrementRewardPool(node1, cycle, BigInt(cycle) * rewardAmount);
 
         await setTimeSinceStart(cycle * 1000);
+      }
+
+      const unclaimedRewards = await rewardsManager.getUnclaimedRewards(
+        node1.getAddress(),
+        user.getAddress(),
+        cycles,
+      );
+
+      for (const [i, r] of unclaimedRewards.entries()) {
+        expect(r).to.be.eq(BigInt(i + 1) * rewardAmount);
       }
 
       for (const cycle of cycles) {
@@ -363,7 +384,15 @@ describe('Rewards Manager', () => {
 
       await setTimeSinceStart(1000);
 
-      await testClaim(node1.getAddress(), node1, 1, rewardAmount / 2n);
+      const balance = await contracts.syloToken.balanceOf(node1.getAddress());
+
+      await rewardsManager.connect(node1).claim(node1.getAddress(), 1);
+
+      const balanceAfter = await contracts.syloToken.balanceOf(
+        node1.getAddress(),
+      );
+
+      expect(balanceAfter).to.equal(balance + rewardAmount / 2n);
     });
 
     it('can claim as node and stakee', async () => {
@@ -381,7 +410,15 @@ describe('Rewards Manager', () => {
 
       await setTimeSinceStart(1000);
 
-      await testClaim(node1.getAddress(), node1, 1, rewardAmount);
+      const balance = await contracts.syloToken.balanceOf(node1.getAddress());
+
+      await rewardsManager.connect(node1).claim(node1.getAddress(), 1);
+
+      const balanceAfter = await contracts.syloToken.balanceOf(
+        node1.getAddress(),
+      );
+
+      expect(balanceAfter).to.equal(balance + rewardAmount);
     });
 
     it('claim is distributed between nodes and stakers', async () => {
@@ -501,8 +538,14 @@ describe('Rewards Manager', () => {
     const balance = await contracts.syloToken.balanceOf(user);
 
     const claim = await rewardsManager.getClaim(node, user.getAddress(), cycle);
-
     expect(claim).to.equal(expectedIncrease);
+
+    const unclaimed = await rewardsManager.getUnclaimedReward(
+      node,
+      user.getAddress(),
+      cycle,
+    );
+    expect(unclaimed).to.equal(expectedIncrease);
 
     await rewardsManager.connect(user).claim(node, cycle);
 
