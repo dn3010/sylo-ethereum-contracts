@@ -294,6 +294,14 @@ describe('Rewards Manager', () => {
       await setTimeSinceStart(1000);
 
       await testClaim(node1.getAddress(), user, 1, rewardAmount);
+
+      const unclaimedReward = await rewardsManager.getUnclaimedReward(
+        node1.getAddress(),
+        user.address,
+        1,
+      );
+
+      expect(unclaimedReward).to.equal(0);
     });
 
     it('can claim reward over multiple cycles', async () => {
