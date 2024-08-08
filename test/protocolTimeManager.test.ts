@@ -151,6 +151,13 @@ describe('Protocol time manager', () => {
     );
   });
 
+  it('can get next before protocol has started', async () => {
+    const [nextCycle, nextPeriod] = await protocolTimeManager.getNext();
+
+    expect(nextCycle).to.equal(1n);
+    expect(nextPeriod).to.equal(0n);
+  });
+
   it('can set period duration before protocol has started', async () => {
     await protocolTimeManager.setPeriodDuration(500);
 
