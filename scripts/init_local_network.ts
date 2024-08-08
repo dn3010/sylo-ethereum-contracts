@@ -9,8 +9,6 @@ export async function main() {
 
   const contracts = Contracts.connectContracts(contractAddresses, provider);
 
-  console.log('deposits address', await contracts.deposits.getAddress());
-
   const deployer = new ethers.Wallet(nodesConfig.deployerPK, provider);
 
   const latestBlock = await provider.getBlock('latest');

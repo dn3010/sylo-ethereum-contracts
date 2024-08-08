@@ -6,7 +6,7 @@ echo "starting local node"
 anvil \
   --state state.json \
   --mnemonic "enroll regret dial tray life phrase saddle term friend figure meat add puppy explain soup" \
-  --block-time 1 \
+  --block-time 4 \
   &>/dev/null &
 
 anvil_pid=`echo $!`

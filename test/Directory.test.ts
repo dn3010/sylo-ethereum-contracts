@@ -651,6 +651,29 @@ describe('Directory', () => {
     );
   });
 
+  it('can get directory entries', async () => {
+    await timeManagerUtil.startProtocol();
+
+    for (let i = 0; i < 5; i++) {
+      await stakingOrchestator.syloStakeAdded(
+        await accounts[i].getAddress(),
+        ethers.ZeroAddress,
+        100,
+      );
+
+      await directory.connect(accounts[i]).joinNextDirectory();
+    }
+
+    const entries = await directory.getEntries(1, 1);
+
+    for (let i = 0; i < 5; i++) {
+      expect(entries[0][i]).to.equal(await accounts[i].getAddress());
+      expect(entries[1][i]).to.equal(100 + 100 * i);
+    }
+
+    console.log(entries);
+  });
+
   it('directory supports correct interfaces', async () => {
     const abi = [
       'function scan(uint128 point) external returns (address)',

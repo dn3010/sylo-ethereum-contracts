@@ -33,4 +33,4 @@ COPY docker/localhost-with-protocol/deploy_contracts.sh .
 RUN chmod +x deploy_contracts.sh
 RUN bash deploy_contracts.sh
 
-ENTRYPOINT ["anvil", "--state", "state.json"]
+ENTRYPOINT ["anvil", "--host", "0.0.0.0", "--state", "state.json"]

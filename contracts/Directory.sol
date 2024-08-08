@@ -136,4 +136,22 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
     function getDirectoryStake(uint256 cycleId, uint256 periodId, address node) external view returns (uint256) {
         return directories[cycleId][periodId].stakes[node];
     }
+
+    function getEntries(uint256 cycleId, uint256 periodId) external view returns (address[] memory, uint256[] memory) {
+        uint256 entryLength = directories[cycleId][periodId].entries.length;
+
+        address[] memory nodes = new address[](entryLength);
+        uint256[] memory boundaries = new uint256[](entryLength);
+
+        DirectoryEntry memory entry;
+        DirectoryEntry[] memory entries = directories[cycleId][periodId].entries;
+
+        for (uint256 i; i < entryLength; ++i) {
+            entry = entries[i];
+            nodes[i] = entry.stakee;
+            boundaries[i] = entry.boundary;
+        }
+
+        return (nodes, boundaries);
+    }
 }
