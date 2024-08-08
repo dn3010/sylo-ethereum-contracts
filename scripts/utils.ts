@@ -1,7 +1,6 @@
-import { MaxUint256, ethers } from 'ethers';
+import { ethers } from 'ethers';
 import * as Contracts from '../common/contracts';
-import contractAddress from '../deployments/ganache_deployment_phase_two.json';
-import { randomBytes } from 'crypto';
+import contractAddress from '../deployments/localhost_deployment_phase_two.json';
 import { Permission } from '../common/enum';
 
 export const MAX_WINNING_PROBABILITY = 2n ** 128n - 1n;
@@ -29,9 +28,10 @@ export async function updateFuturepassRegistrar(
   contracts: Contracts.SyloContracts,
   node: ethers.Signer,
 ): Promise<void> {
-  await contracts.futurepassRegistrar.connect(node).create(node.getAddress(), {
-    gasLimit: 1_000_000,
-  });
+  await contracts.futurepassRegistrar
+    .connect(node)
+    .create(node.getAddress())
+    .then(tx => tx.wait());
 }
 
 export async function addStake(
@@ -40,15 +40,41 @@ export async function addStake(
 ): Promise<void> {
   await contracts.syloToken
     .connect(node)
-    .approve(contractAddress.stakingManager, ethers.parseEther('1000000'), {
-      gasLimit: 1_000_000,
-    });
+    .approve(contractAddress.syloStakingManager, ethers.parseEther('1000000'))
+    .then(tx => tx.wait());
 
-  await contracts.stakingManager
+  await contracts.syloStakingManager
     .connect(node)
-    .addStake(ethers.parseEther('100000'), node.getAddress(), {
-      gasLimit: 1_000_000,
-    });
+    .addStake(node.getAddress(), ethers.parseEther('100000'))
+    .then(tx => tx.wait());
+}
+
+export async function addSeekerStake(
+  contracts: Contracts.SyloContracts,
+  nodeAccount: ethers.Signer,
+  oracle: ethers.Signer,
+  tokenId: number,
+): Promise<void> {
+  if (!(await contracts.seekers.exists(tokenId))) {
+    await contracts.seekers
+      .connect(nodeAccount)
+      .mint(await nodeAccount.getAddress(), tokenId)
+      .then(tx => tx.wait());
+  }
+
+  await contracts.seekerStatsOracle
+    .connect(oracle)
+    .registerSeekerRestricted({
+      seekerId: tokenId,
+      rank: 100,
+      attrReactor: 10,
+      attrCores: 10,
+      attrDurability: 10,
+      attrSensors: 10,
+      attrStorage: 10,
+      attrChip: 10,
+    })
+    .then(tx => tx.wait());
 }
 
 export async function registerNodes(
@@ -58,48 +84,9 @@ export async function registerNodes(
   if (nodes.publicEndPoint != '') {
     await contracts.registries
       .connect(nodes.signer)
-      .register(nodes.publicEndPoint, { gasLimit: 1_000_000 });
+      .register(nodes.publicEndPoint)
+      .then(tx => tx.wait());
   }
-}
-
-export async function setSeekerRegistry(
-  contracts: Contracts.SyloContracts,
-  nodeAccount: ethers.Signer,
-  seekerAccount: ethers.Signer,
-  tokenId: number,
-): Promise<void> {
-  if (!(await contracts.seekers.exists(tokenId))) {
-    await contracts.seekers
-      .connect(seekerAccount)
-      .mint(await seekerAccount.getAddress(), tokenId, { gasLimit: 1_000_000 });
-  }
-
-  const nonce = randomBytes(32);
-
-  const accountAddress = await nodeAccount.getAddress();
-  const proofMessage = await contracts.registries.getProofMessage(
-    tokenId,
-    accountAddress,
-    nonce,
-  );
-
-  const signature = await seekerAccount.signMessage(
-    Buffer.from(proofMessage.slice(2), 'hex'),
-  );
-
-  await contracts.registries
-    .connect(nodeAccount)
-    .setSeekerAccount(
-      await seekerAccount.getAddress(),
-      tokenId,
-      nonce,
-      signature,
-      { gasLimit: 1_000_000 },
-    );
-
-  await contracts.seekerPowerOracle
-    .connect(seekerAccount)
-    .registerSeekerPowerRestricted(tokenId, MaxUint256);
 }
 
 export async function depositTicketing(
@@ -108,25 +95,18 @@ export async function depositTicketing(
 ) {
   await contracts.syloToken
     .connect(incentivisedNode)
-    .approve(contractAddress.syloTicketing, ethers.parseEther('1000000000'), {
-      gasLimit: 1_000_000,
-    });
+    .approve(contracts.deposits.getAddress(), ethers.parseEther('1000000000'))
+    .then(tx => tx.wait());
 
-  await contracts.syloTicketing
+  await contracts.deposits
     .connect(incentivisedNode)
-    .depositEscrow(
-      ethers.parseEther('1000000'),
-      incentivisedNode.getAddress(),
-      { gasLimit: 1_000_000 },
-    );
+    .depositEscrow(ethers.parseEther('100000'), incentivisedNode.getAddress())
+    .then(tx => tx.wait());
 
-  await contracts.syloTicketing
+  await contracts.deposits
     .connect(incentivisedNode)
-    .depositPenalty(
-      ethers.parseEther('100000'),
-      incentivisedNode.getAddress(),
-      { gasLimit: 1_000_000 },
-    );
+    .depositPenalty(ethers.parseEther('100000'), incentivisedNode.getAddress())
+    .then(tx => tx.wait());
 }
 
 export async function authorizeAccount(
@@ -136,36 +116,5 @@ export async function authorizeAccount(
 ) {
   await contracts.authorizedAccounts
     .connect(main)
-    .authorizeAccount(authorized, [Permission.PersonalSign], {
-      gasLimit: 1_000_000,
-    });
-}
-
-export async function setNetworkParams(
-  contracts: Contracts.SyloContracts,
-  deployer: ethers.Signer,
-) {
-  await contracts.ticketingParameters
-    .connect(deployer)
-    .setBaseLiveWinProb(MAX_WINNING_PROBABILITY, { gasLimit: 1_000_000 });
-
-  await contracts.ticketingParameters
-    .connect(deployer)
-    .setFaceValue(ethers.parseEther('100'), { gasLimit: 1_000_000 });
-
-  await contracts.ticketingParameters
-    .connect(deployer)
-    .setTicketDuration(1_000_000, { gasLimit: 1_000_000 });
-
-  await contracts.syloTicketing
-    .connect(deployer)
-    .setUnlockDuration(5, { gasLimit: 1_000_000 });
-
-  await contracts.stakingManager
-    .connect(deployer)
-    .setUnlockDuration(5, { gasLimit: 1_000_000 });
-
-  await contracts.epochsManager
-    .connect(deployer)
-    .setEpochDuration(10, { gasLimit: 1_000_000 });
+    .authorizeAccount(authorized, [Permission.PersonalSign], {});
 }

@@ -113,21 +113,16 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
     }
 
     function joinNextDirectory() external {
-        (
-            IProtocolTimeManager.Cycle memory currentRewardCycle,
-            IProtocolTimeManager.Period memory currentPeriod
-        ) = protocolTimeManager.getTime();
-
         uint256 nodeStake = stakingOrchestrator.getNodeStake(msg.sender);
         if (nodeStake == 0) {
             revert CannotJoinDirectoryWithZeroStake();
         }
 
-        if (directories[currentRewardCycle.id][currentPeriod.id + 1].stakes[msg.sender] > 0) {
+        (uint256 rewardCycle, uint256 stakingPeriod) = protocolTimeManager.getNext();
+
+        if (directories[rewardCycle][stakingPeriod].stakes[msg.sender] > 0) {
             revert NodeAlreadyJoinedDirectory();
         }
-
-        (uint256 rewardCycle, uint256 stakingPeriod) = protocolTimeManager.getNext();
 
         uint256 nextBoundary = directories[rewardCycle][stakingPeriod].totalStake + nodeStake;
 

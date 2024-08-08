@@ -59,6 +59,7 @@ describe('Staking Orchestrator', () => {
         ethers.ZeroAddress,
         accounts[0].getAddress(),
         ethers.ZeroAddress,
+        ethers.ZeroAddress,
         0,
         0,
       ),
@@ -70,6 +71,7 @@ describe('Staking Orchestrator', () => {
     await expect(
       stakingOrchestrator.initialize(
         contracts.protocolTimeManager.getAddress(),
+        ethers.ZeroAddress,
         ethers.ZeroAddress,
         ethers.ZeroAddress,
         0,
@@ -85,12 +87,27 @@ describe('Staking Orchestrator', () => {
         contracts.protocolTimeManager.getAddress(),
         accounts[0].getAddress(),
         ethers.ZeroAddress,
+        ethers.ZeroAddress,
         0,
         0,
       ),
     ).to.be.revertedWithCustomError(
       stakingOrchestrator,
       'SyloStakingManagerAddressCannotBeNil',
+    );
+
+    await expect(
+      stakingOrchestrator.initialize(
+        contracts.protocolTimeManager.getAddress(),
+        accounts[0].getAddress(),
+        contracts.syloStakingManager.getAddress(),
+        ethers.ZeroAddress,
+        0,
+        0,
+      ),
+    ).to.be.revertedWithCustomError(
+      stakingOrchestrator,
+      'SeekerStakingManagerAddressCannotBeNil',
     );
   });
 
@@ -100,6 +117,7 @@ describe('Staking Orchestrator', () => {
         contracts.protocolTimeManager.getAddress(),
         contracts.seekerStatsOracle.getAddress(),
         contracts.syloStakingManager.getAddress(),
+        contracts.seekerStakingManager.getAddress(),
         1,
         1,
       ),

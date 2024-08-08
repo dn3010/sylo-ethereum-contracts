@@ -9,6 +9,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./IStakingOrchestrator.sol";
 import "../IProtocolTimeManager.sol";
 import "./sylo/ISyloStakingManager.sol";
+import "./seekers/ISeekerStakingManager.sol";
 import "./seekers/ISeekerStatsOracle.sol";
 
 /**
@@ -197,11 +198,13 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
     error ProtocolTimeManagerAddressCannotBeNil();
     error SeekerStatsOracleAddressCannotBeNil();
     error SyloStakingManagerAddressCannotBeNil();
+    error SeekerStakingManagerAddressCannotBeNil();
 
     function initialize(
         IProtocolTimeManager _protocolTimeManager,
         ISeekerStatsOracle _seekerStatsOracle,
         ISyloStakingManager _syloStakingManager,
+        ISeekerStakingManager _seekerStakingManager,
         uint256 _capacityCoverageMultiplier,
         uint256 _capacityPenaltyFactor
     ) external initializer {
@@ -214,6 +217,9 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         if (address(_syloStakingManager) == address(0)) {
             revert SyloStakingManagerAddressCannotBeNil();
         }
+        if (address(_seekerStakingManager) == address(0)) {
+            revert SeekerStakingManagerAddressCannotBeNil();
+        }
 
         protocolTimeManager = _protocolTimeManager;
         seekerStatsOracle = _seekerStatsOracle;
@@ -224,6 +230,7 @@ contract StakingOrchestrator is IStakingOrchestrator, Initializable, AccessContr
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(onlyOwner, msg.sender);
         _grantRole(onlyStakingManager, address(_syloStakingManager));
+        _grantRole(onlyStakingManager, address(_seekerStakingManager));
     }
 
     function setCapacityCoverageMultiplier(
