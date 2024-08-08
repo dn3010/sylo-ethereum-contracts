@@ -670,8 +670,6 @@ describe('Directory', () => {
       expect(entries[0][i]).to.equal(await accounts[i].getAddress());
       expect(entries[1][i]).to.equal(100 + 100 * i);
     }
-
-    console.log(entries);
   });
 
   it('directory supports correct interfaces', async () => {
@@ -680,6 +678,7 @@ describe('Directory', () => {
       'function scanWithTime(uint128 point, uint256 rewardCycleId, uint256 stakingPeriodId) external returns (address)',
       'function joinNextDirectory() external',
       'function getDirectoryStake(uint256 cycle, uint256 period, address node) external view returns (uint256)',
+      'function getEntries(uint256 cycleId, uint256 periodId) external view returns (address[] memory, uint256[] memory)',
     ];
 
     const interfaceId = getInterfaceId(abi);
