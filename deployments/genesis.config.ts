@@ -103,12 +103,12 @@ const LocalTestnetParameters: ContractParameters = {
   },
 
   Registries: {
-    defaultPayoutPercentage: 100000, // All rewards go to stakers
+    defaultPayoutPercentage: 50000,
   },
 
   Ticketing: {
     faceValue: hre.ethers.parseEther('100'),
-    multiReceiverFaceValue: 100000,
+    multiReceiverFaceValue: hre.ethers.parseEther('100'),
     baseLiveWinProb: 2n ** 128n - 1n,
     expiredWinProb: 2n ** 128n - 1n,
     ticketDuration: 10_000_000, // make sure the ticket never expires in the short time on testnet
