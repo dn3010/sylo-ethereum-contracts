@@ -125,7 +125,7 @@ export async function main() {
   }
 
   // progress to start next cycle
-  await provider.send('evm_increaseTime', [1001]);
+  await provider.send('evm_increaseTime', [1500]);
   await provider.send('evm_mine', []);
 }
 
