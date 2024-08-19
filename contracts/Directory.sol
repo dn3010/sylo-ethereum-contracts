@@ -143,13 +143,10 @@ contract Directory is IDirectory, Initializable, Ownable2StepUpgradeable, ERC165
         address[] memory nodes = new address[](entryLength);
         uint256[] memory boundaries = new uint256[](entryLength);
 
-        DirectoryEntry memory entry;
         DirectoryEntry[] memory entries = directories[cycleId][periodId].entries;
-
         for (uint256 i; i < entryLength; ++i) {
-            entry = entries[i];
-            nodes[i] = entry.stakee;
-            boundaries[i] = entry.boundary;
+            nodes[i] = entries[i].stakee;
+            boundaries[i] = entries[i].boundary;
         }
 
         return (nodes, boundaries);

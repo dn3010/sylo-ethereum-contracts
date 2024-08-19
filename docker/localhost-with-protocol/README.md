@@ -51,8 +51,8 @@ yarn docker-ganache
 ## Run docker
 
 The options used to run the local ganache node should be set correctly
-to ensure that it re-uses the same directory for the chain state.
+to ensure that it re-uses the same account used to deploy the contracts.
 
 ```sh
-docker run -p 8545:8545 dn3010/sylo-ethereum-testnet:0.1.0 `bash -c ganache-cli --host 0.0.0.0 --db ganache-data --blockTime 5`
+docker run --platform linux/amd64 -p 8545:8545 dn3010/sylo-ethereum-testnet:v2.0.0 --mnemonic "enroll regret dial tray life phrase saddle term friend figure meat add puppy explain soup"
 ```
