@@ -90,8 +90,8 @@ contract RewardsManager is IRewardsManager, Initializable, AccessControl {
         protocolTimeManager = _protocolTimeManager;
         stakingOrchestrator = _stakingOrchestrator;
 
-        _grantRole(onlyTicketing, address(_ticketing));
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(onlyTicketing, address(_ticketing));
     }
 
     /**

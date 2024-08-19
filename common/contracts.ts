@@ -5,26 +5,6 @@ export const FixedContractNames = {
   syloToken: 'SyloToken',
 };
 
-export const DeployedContractNames = {
-  syloStakingManager: 'SyloStakingManager',
-  seekerStatsOracle: 'SeekerStatsOracle',
-  seekerStakingManager: 'SeekerStakingManager',
-  protocolTimeManager: 'ProtocolTimeManager',
-  registries: 'Registries',
-  authorizedAccounts: 'AuthorizedAccounts',
-  rewardsManager: 'RewardsManager',
-  ticketing: 'Ticketing',
-  stakingOrchestrator: 'StakingOrchestrator',
-  direcrory: 'Directory',
-  futurepass: 'FuturepassRegistrar',
-  deposits: 'Deposits',
-};
-
-export const ContractNames = {
-  ...FixedContractNames,
-  ...DeployedContractNames,
-};
-
 export type SyloContracts = {
   syloToken: factories.contracts.SyloToken;
   syloStakingManager: factories.contracts.staking.sylo.SyloStakingManager;
@@ -38,7 +18,7 @@ export type SyloContracts = {
   ticketing: factories.contracts.payments.Ticketing;
   stakingOrchestrator: factories.contracts.staking.StakingOrchestrator;
   directory: factories.contracts.Directory;
-  futurepassRegistrar: factories.contracts.mocks.TestFuturepassRegistrar;
+  futurepassRegistrar: factories.contracts.IFuturepassRegistrar;
   deposits: factories.contracts.payments.Deposits;
 };
 
@@ -48,13 +28,13 @@ export type ContractAddresses = {
   seekerStatsOracle: string;
   seekerStakingManager: string;
   seekers: string;
+  stakingOrchestrator: string;
   protocolTimeManager: string;
   registries: string;
   authorizedAccounts: string;
   deposits: string;
   rewardsManager: string;
   ticketing: string;
-  stakingOrchestator: string;
   directory: string;
   futurepassRegistrar: string;
 };
@@ -83,6 +63,11 @@ export function connectContracts(
     provider,
   );
 
+  const stakingOrchestrator = factories.StakingOrchestrator__factory.connect(
+    contracts.stakingOrchestrator,
+    provider,
+  );
+
   const seekers = factories.TestSeekers__factory.connect(
     contracts.seekers,
     provider,
@@ -104,17 +89,12 @@ export function connectContracts(
   );
 
   const deposits = factories.Deposits__factory.connect(
-    contracts.ticketing,
+    contracts.deposits,
     provider,
   );
 
   const ticketing = factories.Ticketing__factory.connect(
     contracts.ticketing,
-    provider,
-  );
-
-  const stakingOrchestrator = factories.StakingOrchestrator__factory.connect(
-    contracts.stakingOrchestator,
     provider,
   );
 
@@ -139,6 +119,7 @@ export function connectContracts(
     syloStakingManager,
     seekerStatsOracle,
     seekerStakingManager,
+    stakingOrchestrator,
     seekers,
     protocolTimeManager,
     registries,
@@ -146,7 +127,6 @@ export function connectContracts(
     deposits,
     ticketing,
     rewardsManager,
-    stakingOrchestrator,
     directory,
     futurepassRegistrar,
   };

@@ -424,6 +424,10 @@ contract ProtocolTimeManager is
      * @notice Retrieves the next cycle and period ids.
      */
     function getNext() external view returns (uint256, uint256) {
+        if (!hasProtocolStarted()) {
+            return (1, 0);
+        }
+
         Cycle memory cycle = _getCurrentCycle();
         Period memory period = _getCurrentPeriod();
 

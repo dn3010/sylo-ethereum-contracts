@@ -10,27 +10,7 @@ import path from 'path';
 import * as fs from 'fs/promises';
 import { ethers, network } from 'hardhat';
 import * as configs from '../deployments/genesis.config';
-import { FixedContractNames } from '../common/contracts';
-import { main } from '../scripts/init_local_network';
-
-export const DeployedContractNames = {
-  syloStakingManager: 'SyloStakingManager',
-  seekerStatsOracle: 'SeekerStatsOracle',
-  seekerStakingManager: 'SeekerStakingManager',
-  stakingOrchestrator: 'StakingOrchestrator',
-  protocolTimeManager: 'ProtocolTimeManager',
-  registries: 'Registries',
-  directory: 'Directory',
-  authorizedAccounts: 'AuthorizedAccounts',
-  rewardsManager: 'RewardsManager',
-  ticketing: 'Ticketing',
-  deposits: 'Deposits',
-};
-
-export const ContractNames = {
-  ...FixedContractNames,
-  ...DeployedContractNames,
-};
+import { ContractNames, DeployedContractNames } from '../common/contracts';
 
 type ContractParams = {
   name: string;
@@ -76,6 +56,22 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     ).address;
   }
 
+  let epochStartBlock = 0;
+  if (typeof config.EpochsManager.initialEpoch === 'number') {
+    epochStartBlock = config.EpochsManager.initialEpoch;
+  } else {
+    const startDate: Date = config.EpochsManager.initialEpoch;
+    const currentTime = Date.now();
+    const msUntilStart = startDate.getTime() - currentTime;
+    const blocksUntilStart = Math.floor(msUntilStart / 4000);
+    const currentBlock = await deployer.provider.getBlock('latest');
+    if (currentBlock == null) {
+      throw new Error('could not determine current block');
+    }
+
+    epochStartBlock = currentBlock.number + blocksUntilStart;
+  }
+
   for (const name of Object.values(DeployedContractNames)) {
     contracts[name] = await deployContract(
       name,
@@ -85,8 +81,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     );
   }
 
-  const statsOracle = config.SeekerStatsOracle.oracle ?? deployer.address;
-
   // INITIALIZE CONTRACTS
   const initializeParams: ContractParams[] = [
     {
@@ -95,96 +89,100 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     },
     {
       name: ContractNames.registries,
-      args: [config.Registries.defaultPayoutPercentage],
+      args: [config.Seekers, config.Registries.defaultPayoutPercentage],
     },
     {
-      name: ContractNames.directory,
+      name: ContractNames.ticketingParameters,
       args: [
-        contracts[ContractNames.stakingOrchestrator].address,
-        contracts[ContractNames.protocolTimeManager].address,
+        config.TicketingParameters.faceValue,
+        config.TicketingParameters.baseLiveWinProb,
+        config.TicketingParameters.expiredWinProb,
+        config.TicketingParameters.decayRate,
+        config.TicketingParameters.ticketDuration,
       ],
     },
     {
-      name: ContractNames.protocolTimeManager,
+      name: ContractNames.epochsManager,
       args: [
-        config.ProtocolTimeManager.cycleDuration,
-        config.ProtocolTimeManager.periodDuration,
-      ],
-    },
-
-    // payments
-    {
-      name: ContractNames.ticketing,
-      args: [
-        contracts[ContractNames.deposits].address,
+        config.Seekers,
+        contracts[ContractNames.directory].address,
         contracts[ContractNames.registries].address,
-        contracts[ContractNames.rewardsManager].address,
-        contracts[ContractNames.authorizedAccounts].address,
-        config.FuturepassRegistrar,
-        config.Ticketing.faceValue,
-        config.Ticketing.multiReceiverFaceValue,
-        config.Ticketing.baseLiveWinProb,
-        config.Ticketing.expiredWinProb,
-        config.Ticketing.decayRate,
-        config.Ticketing.ticketDuration,
+        contracts[ContractNames.ticketingParameters].address,
+        epochStartBlock,
+        config.EpochsManager.epochDuration,
       ],
     },
     {
-      name: ContractNames.deposits,
+      name: ContractNames.stakingManager,
       args: [
         config.SyloToken,
         contracts[ContractNames.rewardsManager].address,
-        contracts[ContractNames.ticketing].address,
-        config.Deposits.unlockDuration,
+        contracts[ContractNames.epochsManager].address,
+        contracts[ContractNames.seekerPowerOracle].address,
+        config.StakingManager.unlockDuration,
+        config.StakingManager.minimumStakeProportion,
+        config.StakingManager.seekerPowerMultiplier,
       ],
     },
     {
       name: ContractNames.rewardsManager,
       args: [
         config.SyloToken,
-        contracts[ContractNames.registries].address,
-        contracts[ContractNames.protocolTimeManager].address,
-        contracts[ContractNames.ticketing].address,
-        contracts[ContractNames.stakingOrchestrator].address,
+        contracts[ContractNames.stakingManager].address,
+        contracts[ContractNames.epochsManager].address,
       ],
     },
-
-    // staking
     {
-      name: ContractNames.syloStakingManager,
+      name: ContractNames.directory,
+      args: [
+        contracts[ContractNames.stakingManager].address,
+        contracts[ContractNames.rewardsManager].address,
+      ],
+    },
+    {
+      name: ContractNames.syloTicketing,
       args: [
         config.SyloToken,
-        contracts[ContractNames.stakingOrchestrator].address,
-        config.SyloStakingManager.unlockDuration,
+        contracts[ContractNames.registries].address,
+        contracts[ContractNames.stakingManager].address,
+        contracts[ContractNames.directory].address,
+        contracts[ContractNames.epochsManager].address,
+        contracts[ContractNames.rewardsManager].address,
+        contracts[ContractNames.authorizedAccounts].address,
+        config.FuturepassRegistrar,
+        config.Ticketing.unlockDuration,
       ],
     },
     {
-      name: ContractNames.stakingOrchestrator,
-      args: [
-        contracts[ContractNames.protocolTimeManager].address,
-        contracts[ContractNames.seekerStatsOracle].address,
-        contracts[ContractNames.syloStakingManager].address,
-        contracts[ContractNames.seekerStakingManager].address,
-        config.StakingOrchestrator.capacityCoverageMultiplier,
-        config.StakingOrchestrator.capacityPenaltyFactor,
-      ],
-    },
-    {
-      name: ContractNames.seekerStakingManager,
-      args: [
-        config.Seekers,
-        contracts[ContractNames.seekerStatsOracle].address,
-        contracts[ContractNames.stakingOrchestrator].address,
-      ],
-    },
-    {
-      name: ContractNames.seekerStatsOracle,
-      args: [statsOracle],
+      name: ContractNames.seekerPowerOracle,
+      args: [config.SeekerPowerOracle.oracleAccount],
     },
   ];
-
   for (const { name, args } of initializeParams) {
     await initializeContract(name, args, deployer.address, execute);
+  }
+
+  // ADD MANAGERS
+  const addManagerParams: ContractParams[] = [
+    {
+      name: ContractNames.directory,
+      args: [contracts[ContractNames.epochsManager].address],
+    },
+    {
+      name: ContractNames.rewardsManager,
+      args: [contracts[ContractNames.syloTicketing].address],
+    },
+    {
+      name: ContractNames.rewardsManager,
+      args: [contracts[ContractNames.stakingManager].address],
+    },
+    {
+      name: ContractNames.rewardsManager,
+      args: [contracts[ContractNames.epochsManager].address],
+    },
+  ];
+  for (const { name, args } of addManagerParams) {
+    await addManager(name, deployer.address, args[0] as string, execute);
   }
 
   await saveContracts(deployer.address, network.name, contracts, config);
@@ -201,8 +199,7 @@ function getConfig(networkName: string): configs.ContractParameters {
     case 'porcini-dev':
       return configs.PorciniDevParameters;
     case 'localhost':
-    case 'hardhat':
-      return configs.LocalTestnetParameters;
+      return configs.GanacheTestnetParameters;
     default:
       throw new Error('unknown network: ' + networkName);
   }
@@ -255,8 +252,27 @@ async function initializeContract(
   return result;
 }
 
-function printEmptyLine() {
-  console.log('');
+async function addManager(
+  contractName: string,
+  deployer: string,
+  manager: string,
+  execute: (
+    name: string,
+    options: TxOptions,
+    methodName: string,
+    ...args: unknown[]
+  ) => Promise<Receipt>,
+): Promise<Receipt> {
+  const result = await execute(
+    contractName,
+    { from: deployer, log: true },
+    'addManager',
+    manager,
+  );
+
+  printEmptyLine();
+
+  return result;
 }
 
 async function saveContracts(
@@ -268,18 +284,16 @@ async function saveContracts(
   const contractDeployInfo = {
     deployer,
     syloToken: config.SyloToken,
-    syloStakingManager: contracts[ContractNames.syloStakingManager].address,
-    seekerStatsOracle: contracts[ContractNames.seekerStatsOracle].address,
-    seekerStakingManager: contracts[ContractNames.seekerStakingManager].address,
-    seekers: config.Seekers,
-    stakingOrchestrator: contracts[ContractNames.stakingOrchestrator].address,
-    protocolTimeManager: contracts[ContractNames.protocolTimeManager].address,
-    registries: contracts[ContractNames.registries].address,
     authorizedAccounts: contracts[ContractNames.authorizedAccounts].address,
-    ticketing: contracts[ContractNames.ticketing].address,
-    deposits: contracts[ContractNames.deposits].address,
+    registries: contracts[ContractNames.registries].address,
+    ticketingParameters: contracts[ContractNames.ticketingParameters].address,
+    epochsManager: contracts[ContractNames.epochsManager].address,
+    stakingManager: contracts[ContractNames.stakingManager].address,
     rewardsManager: contracts[ContractNames.rewardsManager].address,
     directory: contracts[ContractNames.directory].address,
+    syloTicketing: contracts[ContractNames.syloTicketing].address,
+    seekers: config.Seekers,
+    seekerPowerOracle: contracts[ContractNames.seekerPowerOracle].address,
     futurepassRegistrar: config.FuturepassRegistrar,
   };
 
@@ -289,4 +303,8 @@ async function saveContracts(
     `${filePath}/${networkName}_deployment_phase_two.json`,
     Buffer.from(JSON.stringify(contractDeployInfo, null, ' '), 'utf8'),
   );
+}
+
+function printEmptyLine() {
+  console.log('');
 }

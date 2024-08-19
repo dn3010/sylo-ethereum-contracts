@@ -6,7 +6,7 @@ on:
 
 jobs:
   build-and-push-seeker-image:
-    name: Build Docker image for local ganache network
+    name: Build Docker image for localhost network
     runs-on: ubuntu-latest
 
     steps:
@@ -32,7 +32,7 @@ jobs:
       - name: Build Tag and Push Docker image
         uses: docker/build-push-action@v5
         with:
-          file: docker/ganache-with-protocol/Dockerfile
+          file: docker/localhost-with-protocol/Dockerfile
           tags: ${{ steps.meta.outputs.tags }}
           push: true
           cache-from: type=gha

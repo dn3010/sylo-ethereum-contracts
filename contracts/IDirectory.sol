@@ -36,4 +36,6 @@ interface IDirectory {
     function joinNextDirectory() external;
 
     function getDirectoryStake(uint256 cycleId, uint256 periodId, address node) external view returns (uint256);
+
+    function getEntries(uint256 cycleId, uint256 periodId) external view returns (address[] memory, uint256[] memory);
 }
