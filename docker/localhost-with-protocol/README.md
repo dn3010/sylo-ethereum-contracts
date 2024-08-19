@@ -45,7 +45,7 @@ this repository.
 ## Build docker
 
 ```sh
-yarn docker-ganache
+yarn docker-localhost
 ```
 
 ## Run docker
