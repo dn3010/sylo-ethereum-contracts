@@ -83,7 +83,7 @@ export async function main() {
   }
 
   // forward time to start protocol
-  await provider.send('evm_increaseTime', [101]);
+  await provider.send('evm_increaseTime', [10001]);
   await provider.send('evm_mine', []);
 
   // ensure each node can redeem a ticket from incentivising
@@ -147,7 +147,7 @@ export async function main() {
   });
 
   // forward time to start protocol
-  await provider.send('evm_increaseTime', [101]);
+  await provider.send('evm_increaseTime', [10001]);
   await provider.send('evm_mine', []);
 
   const timeTwo = await contracts.protocolTimeManager.getTime();
