@@ -98,8 +98,8 @@ const LocalTestnetParameters: ContractParameters = {
   FuturepassRegistrar: '',
 
   ProtocolTimeManager: {
-    cycleDuration: 1000,
-    periodDuration: 100,
+    cycleDuration: 100000,
+    periodDuration: 10000,
   },
 
   Registries: {

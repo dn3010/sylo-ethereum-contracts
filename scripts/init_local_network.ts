@@ -82,8 +82,11 @@ export async function main() {
     console.log('Incentivising node', i, 'is ready');
   }
 
+  const time = await contracts.protocolTimeManager.getTime();
+  const periodDuration = time[1][2] + BigInt(10);
+
   // forward time to start protocol
-  await provider.send('evm_increaseTime', [101]);
+  await provider.send('evm_increaseTime', [periodDuration]);
   await provider.send('evm_mine', []);
 
   // ensure each node can redeem a ticket from incentivising
@@ -123,10 +126,6 @@ export async function main() {
       `node ${await node.signer.getAddress()} successfully redeemed!`,
     );
   }
-
-  // progress to start next cycle
-  await provider.send('evm_increaseTime', [1500]);
-  await provider.send('evm_mine', []);
 }
 
 async function createNode(
