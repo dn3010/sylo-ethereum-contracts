@@ -11,7 +11,7 @@
     "solhint": "solhint 'contracts/**/*.sol'",
     "package-abi": "npx ts-node scripts/parse_artifacts.ts && npx ts-node scripts/package_abis.ts",
     "publish": "npm run package-abi && npm publish",
-    "docker-localhost": "DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform linux/amd64 . -f docker/localhost-with-protocol/Dockerfile -t dn3010/sylo-ethereum-testnet:localhost"
+    "docker-localhost": "DOCKER_BUILDKIT=1 docker buildx build --progress=plain --platform linux/amd64 . -f docker/localhost-with-protocol/Dockerfile -t dn3010/sylo-ethereum-testnet:bootstrap-update"
   },
   "author": "Sylo",
   "license": "ISC",

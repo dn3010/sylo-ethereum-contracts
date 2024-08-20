@@ -124,9 +124,30 @@ export async function main() {
     );
   }
 
+  const time = await contracts.protocolTimeManager.getTime();
+  const cycleId = time[0][0];
+  const periodId = time[1][0];
+
+  const entries = await contracts.directory.getEntries(cycleId, periodId);
+
+  entries[0].forEach(entry => {
+    console.log('entry ', entry);
+  });
+
+  console.log('finished');
+
   // progress to start next cycle
-  await provider.send('evm_increaseTime', [1500]);
-  await provider.send('evm_mine', []);
+  // await provider.send('evm_increaseTime', [1500]);
+  // await provider.send('evm_mine', []);
+
+  // await Promise.all(
+  //   nodes.map(async (node, i) => {
+  //     await contracts.directory
+  //       .connect(node.signer)
+  //       .joinNextDirectory()
+  //       .then(tx => tx.wait());
+  //   }),
+  // );
 }
 
 async function createNode(
