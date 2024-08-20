@@ -124,9 +124,21 @@ export async function main() {
     );
   }
 
+  await Promise.all(
+    nodes.map(async (node, i) => {
+      await contracts.directory
+        .connect(node.signer)
+        .joinNextDirectory()
+        .then(tx => tx.wait());
+    }),
+  );
+
   const time = await contracts.protocolTimeManager.getTime();
   const cycleId = time[0][0];
   const periodId = time[1][0];
+
+  console.log('cycle id ', cycleId);
+  console.log('period id ', periodId);
 
   const entries = await contracts.directory.getEntries(cycleId, periodId);
 
@@ -134,20 +146,27 @@ export async function main() {
     console.log('entry ', entry);
   });
 
+  // forward time to start protocol
+  await provider.send('evm_increaseTime', [101]);
+  await provider.send('evm_mine', []);
+
+  const timeTwo = await contracts.protocolTimeManager.getTime();
+  const cycleIdTwo = timeTwo[0][0];
+  const periodIdTwo = timeTwo[1][0];
+
+  console.log('cycle id ', cycleIdTwo);
+  console.log('period id ', periodIdTwo);
+
+  const entriesTwo = await contracts.directory.getEntries(
+    cycleIdTwo,
+    periodIdTwo,
+  );
+
+  entriesTwo[0].forEach(entry => {
+    console.log('entry ', entry);
+  });
+
   console.log('finished');
-
-  // progress to start next cycle
-  // await provider.send('evm_increaseTime', [1500]);
-  // await provider.send('evm_mine', []);
-
-  // await Promise.all(
-  //   nodes.map(async (node, i) => {
-  //     await contracts.directory
-  //       .connect(node.signer)
-  //       .joinNextDirectory()
-  //       .then(tx => tx.wait());
-  //   }),
-  // );
 }
 
 async function createNode(
