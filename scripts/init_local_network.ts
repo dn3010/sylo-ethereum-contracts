@@ -124,47 +124,14 @@ export async function main() {
     );
   }
 
-  await Promise.all(
-    nodes.map(async (node, i) => {
-      await contracts.directory
-        .connect(node.signer)
-        .joinNextDirectory()
-        .then(tx => tx.wait());
-    }),
-  );
-
   const time = await contracts.protocolTimeManager.getTime();
   const cycleId = time[0][0];
   const periodId = time[1][0];
 
-  console.log('cycle id ', cycleId);
-  console.log('period id ', periodId);
-
-  const entries = await contracts.directory.getEntries(cycleId, periodId);
-
-  entries[0].forEach(entry => {
-    console.log('entry ', entry);
-  });
-
-  // forward time to start protocol
-  await provider.send('evm_increaseTime', [10001]);
-  await provider.send('evm_mine', []);
-
-  const timeTwo = await contracts.protocolTimeManager.getTime();
-  const cycleIdTwo = timeTwo[0][0];
-  const periodIdTwo = timeTwo[1][0];
-
-  console.log('cycle id ', cycleIdTwo);
-  console.log('period id ', periodIdTwo);
-
-  const entriesTwo = await contracts.directory.getEntries(
-    cycleIdTwo,
-    periodIdTwo,
-  );
-
-  entriesTwo[0].forEach(entry => {
-    console.log('entry ', entry);
-  });
+  console.log('cycle id        ', cycleId);
+  console.log('period id       ', periodId);
+  console.log('cycle duration  ', time[0][2]);
+  console.log('period duration ', time[1][2]);
 
   console.log('finished');
 }
