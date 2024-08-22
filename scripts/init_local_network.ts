@@ -86,7 +86,7 @@ export async function main() {
   const periodDuration = time[1][2] + BigInt(10);
 
   // forward time to start protocol
-  await provider.send('evm_increaseTime', [periodDuration]);
+  await provider.send('evm_increaseTime', [periodDuration.toString()]);
   await provider.send('evm_mine', []);
 
   // ensure each node can redeem a ticket from incentivising
