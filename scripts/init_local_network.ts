@@ -90,42 +90,42 @@ export async function main() {
   await provider.send('evm_mine', []);
 
   // ensure each node can redeem a ticket from incentivising
-  for (const node of nodes) {
-    const { ticket, redeemerRand, senderSig, receiverSig } =
-      await utils.createSignedTicket(
-        contracts,
-        incentivisingNodes[0].signer,
-        incentivisingNodes[0].signer,
-        node.signer,
-      );
+  // for (const node of nodes) {
+  //   const { ticket, redeemerRand, senderSig, receiverSig } =
+  //     await utils.createSignedTicket(
+  //       contracts,
+  //       incentivisingNodes[0].signer,
+  //       incentivisingNodes[0].signer,
+  //       node.signer,
+  //     );
 
-    await contracts.ticketing
-      .connect(node.signer)
-      .redeem(ticket, redeemerRand, senderSig, receiverSig)
-      .then(tx => tx.wait());
-  }
+  //   await contracts.ticketing
+  //     .connect(node.signer)
+  //     .redeem(ticket, redeemerRand, senderSig, receiverSig)
+  //     .then(tx => tx.wait());
+  // }
 
   // have each node also have unclaimed rewards for the first cycle
-  for (const node of nodes) {
-    await utils.depositTicketing(contracts, node.signer);
+  // for (const node of nodes) {
+  //   await utils.depositTicketing(contracts, node.signer);
 
-    const { ticket, redeemerRand, senderSig, receiverSig } =
-      await utils.createSignedTicket(
-        contracts,
-        node.signer,
-        node.signer,
-        node.signer,
-      );
+  //   const { ticket, redeemerRand, senderSig, receiverSig } =
+  //     await utils.createSignedTicket(
+  //       contracts,
+  //       node.signer,
+  //       node.signer,
+  //       node.signer,
+  //     );
 
-    await contracts.ticketing
-      .connect(node.signer)
-      .redeem(ticket, redeemerRand, senderSig, receiverSig)
-      .then(tx => tx.wait());
+  //   await contracts.ticketing
+  //     .connect(node.signer)
+  //     .redeem(ticket, redeemerRand, senderSig, receiverSig)
+  //     .then(tx => tx.wait());
 
-    console.log(
-      `node ${await node.signer.getAddress()} successfully redeemed!`,
-    );
-  }
+  //   console.log(
+  //     `node ${await node.signer.getAddress()} successfully redeemed!`,
+  //   );
+  // }
 }
 
 async function createNode(
