@@ -82,51 +82,50 @@ export async function main() {
     console.log('Incentivising node', i, 'is ready');
   }
 
+  const time = await contracts.protocolTimeManager.getTime();
+  const periodDuration = time[1][2] + BigInt(10);
+
   // forward time to start protocol
-  await provider.send('evm_increaseTime', [101]);
+  await provider.send('evm_increaseTime', [periodDuration.toString()]);
   await provider.send('evm_mine', []);
 
   // ensure each node can redeem a ticket from incentivising
-  for (const node of nodes) {
-    const { ticket, redeemerRand, senderSig, receiverSig } =
-      await utils.createSignedTicket(
-        contracts,
-        incentivisingNodes[0].signer,
-        incentivisingNodes[0].signer,
-        node.signer,
-      );
+  // for (const node of nodes) {
+  //   const { ticket, redeemerRand, senderSig, receiverSig } =
+  //     await utils.createSignedTicket(
+  //       contracts,
+  //       incentivisingNodes[0].signer,
+  //       incentivisingNodes[0].signer,
+  //       node.signer,
+  //     );
 
-    await contracts.ticketing
-      .connect(node.signer)
-      .redeem(ticket, redeemerRand, senderSig, receiverSig)
-      .then(tx => tx.wait());
-  }
+  //   await contracts.ticketing
+  //     .connect(node.signer)
+  //     .redeem(ticket, redeemerRand, senderSig, receiverSig)
+  //     .then(tx => tx.wait());
+  // }
 
   // have each node also have unclaimed rewards for the first cycle
-  for (const node of nodes) {
-    await utils.depositTicketing(contracts, node.signer);
+  // for (const node of nodes) {
+  //   await utils.depositTicketing(contracts, node.signer);
 
-    const { ticket, redeemerRand, senderSig, receiverSig } =
-      await utils.createSignedTicket(
-        contracts,
-        node.signer,
-        node.signer,
-        node.signer,
-      );
+  //   const { ticket, redeemerRand, senderSig, receiverSig } =
+  //     await utils.createSignedTicket(
+  //       contracts,
+  //       node.signer,
+  //       node.signer,
+  //       node.signer,
+  //     );
 
-    await contracts.ticketing
-      .connect(node.signer)
-      .redeem(ticket, redeemerRand, senderSig, receiverSig)
-      .then(tx => tx.wait());
+  //   await contracts.ticketing
+  //     .connect(node.signer)
+  //     .redeem(ticket, redeemerRand, senderSig, receiverSig)
+  //     .then(tx => tx.wait());
 
-    console.log(
-      `node ${await node.signer.getAddress()} successfully redeemed!`,
-    );
-  }
-
-  // progress to start next cycle
-  await provider.send('evm_increaseTime', [1500]);
-  await provider.send('evm_mine', []);
+  //   console.log(
+  //     `node ${await node.signer.getAddress()} successfully redeemed!`,
+  //   );
+  // }
 }
 
 async function createNode(
